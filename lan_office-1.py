@@ -586,29 +586,38 @@ class LANOfficeApp:
         while self.running:
             try:
                 data, addr = sock.recvfrom(1024)
-                msg = json.loads(data.decode())
-                if msg.get("type") == "presence" and addr[0] != self.local_ip:
-                    ip = addr[0]
-                    name = msg.get("name", ip)
-                    with self.peers_lock:
-                        is_new = ip not in self.peers
-                        self.peers[ip] = {"name": name, "last_seen": time.time()}
-                    if is_new:
-                        self.root.after(0, self._on_peer_join, ip, name)
-                    else:
-                        self.root.after(0, self._refresh_peers_list)
-                elif msg.get("type") == "leave":
-                    ip = addr[0]
-                    name = msg.get("name", ip)
-                    with self.peers_lock:
-                        if ip in self.peers:
-                            del self.peers[ip]
-                    self.root.after(0, self._on_peer_leave, ip, name)
+                self._handle_presence_data(data, addr)
             except socket.timeout:
                 pass
             except Exception as e:
                 self.logger.error(f"Presence listen error: {e}")
         sock.close()
+
+    def _handle_presence_data(self, data, addr):
+        try:
+            msg = json.loads(data.decode())
+            mtype = msg.get("type")
+            if mtype == "presence" and addr[0] != self.local_ip:
+                self._update_peer_presence(addr[0], msg.get("name", addr[0]))
+            elif mtype == "leave":
+                self._remove_peer(addr[0], msg.get("name", addr[0]))
+        except Exception:
+            pass
+
+    def _update_peer_presence(self, ip, name):
+        with self.peers_lock:
+            is_new = ip not in self.peers
+            self.peers[ip] = {"name": name, "last_seen": time.time()}
+        if is_new:
+            self.root.after(0, self._on_peer_join, ip, name)
+        else:
+            self.root.after(0, self._refresh_peers_list)
+
+    def _remove_peer(self, ip, name):
+        with self.peers_lock:
+            if ip in self.peers:
+                del self.peers[ip]
+        self.root.after(0, self._on_peer_leave, ip, name)
 
     def _on_peer_join(self, ip, name):
         self.logger.info(f"Peer joined: {name} ({ip})")
@@ -704,73 +713,78 @@ class LANOfficeApp:
 
     def _handle_file(self, conn, addr):
         try:
-            raw_len = conn.recv(4)
-            if len(raw_len) < 4:
+            meta = self._receive_file_meta(conn)
+            if not meta:
                 return
-            meta_len = struct.unpack("!I", raw_len)[0]
-            meta_data = b""
-            while len(meta_data) < meta_len:
-                chunk = conn.recv(min(BUFFER_SIZE, meta_len - len(meta_data)))
-                if not chunk:
-                    break
-                meta_data += chunk
 
-            meta = json.loads(meta_data.decode())
             filename = meta["filename"]
             filesize = meta["filesize"]
-            sender   = meta.get("sender", addr[0])
+            sender = meta.get("sender", addr[0])
             self.logger.info(f"File transfer from {addr}: {filename}")
 
-            # Ask user where to save (on main thread)
-            save_path_holder = [None]
-            done_event = threading.Event()
-
-            def ask_save():
-                answer = messagebox.askyesno(
-                    "Incoming File",
-                    f"{sender} wants to send you:\n{filename} "
-                    f"({self._fmt_size(filesize)})\n\nAccept?")
-                if answer:
-                    if self.download_dir and os.path.exists(self.download_dir):
-                        p = os.path.join(self.download_dir, filename)
-                        # Check for collision
-                        if os.path.exists(p):
-                            base, ext = os.path.splitext(filename)
-                            p = os.path.join(self.download_dir, f"{base}_{int(time.time())}{ext}")
-                    else:
-                        p = filedialog.asksaveasfilename(
-                            initialfile=filename,
-                            title="Save file as")
-                    save_path_holder[0] = p
-                done_event.set()
-
-            self.root.after(0, ask_save)
-            done_event.wait(timeout=60)
-
-            save_path = save_path_holder[0]
+            save_path = self._get_save_path(filename, filesize, sender)
             if not save_path:
                 conn.close()
                 return
 
-            received = 0
-            self.root.after(0, self._show_progress, True)
-            with open(save_path, "wb") as f:
-                while received < filesize:
-                    chunk = conn.recv(min(BUFFER_SIZE, filesize - received))
-                    if not chunk:
-                        break
-                    f.write(chunk)
-                    received += len(chunk)
-                    pct = (received / filesize) * 100
-                    self.root.after(0, self.progress_val.set, pct)
-            self.root.after(0, self._show_progress, False)
-
+            self._receive_file_data(conn, save_path, filesize)
             self.root.after(0, self._log_file,
                             f"Received '{filename}' from {sender} → saved to {save_path}", filename=filename)
         except Exception:
             self.logger.exception("File receive error")
         finally:
             conn.close()
+
+    def _receive_file_meta(self, conn):
+        raw_len = conn.recv(4)
+        if len(raw_len) < 4:
+            return None
+        meta_len = struct.unpack("!I", raw_len)[0]
+        meta_data = b""
+        while len(meta_data) < meta_len:
+            chunk = conn.recv(min(BUFFER_SIZE, meta_len - len(meta_data)))
+            if not chunk:
+                break
+            meta_data += chunk
+        return json.loads(meta_data.decode())
+
+    def _get_save_path(self, filename, filesize, sender):
+        save_path_holder = [None]
+        done_event = threading.Event()
+
+        def ask_save():
+            answer = messagebox.askyesno(
+                "Incoming File",
+                f"{sender} wants to send you:\n{filename} "
+                f"({self._fmt_size(filesize)})\n\nAccept?")
+            if answer:
+                if self.download_dir and os.path.exists(self.download_dir):
+                    p = os.path.join(self.download_dir, filename)
+                    if os.path.exists(p):
+                        base, ext = os.path.splitext(filename)
+                        p = os.path.join(self.download_dir, f"{base}_{int(time.time())}{ext}")
+                else:
+                    p = filedialog.asksaveasfilename(initialfile=filename, title="Save file as")
+                save_path_holder[0] = p
+            done_event.set()
+
+        self.root.after(0, ask_save)
+        done_event.wait(timeout=60)
+        return save_path_holder[0]
+
+    def _receive_file_data(self, conn, save_path, filesize):
+        received = 0
+        self.root.after(0, self._show_progress, True)
+        with open(save_path, "wb") as f:
+            while received < filesize:
+                chunk = conn.recv(min(BUFFER_SIZE, filesize - received))
+                if not chunk:
+                    break
+                f.write(chunk)
+                received += len(chunk)
+                pct = (received / filesize) * 100
+                self.root.after(0, self.progress_val.set, pct)
+        self.root.after(0, self._show_progress, False)
 
     # ══════════════════════════════════════════
     #  CLEANUP
