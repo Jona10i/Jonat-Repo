@@ -6,6 +6,7 @@ import base64
 import io
 import html
 import winsound
+import threading
 from datetime import datetime
 from PIL import Image
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QHBoxLayout, 
@@ -21,6 +22,10 @@ from zeroconf import ServiceInfo, Zeroconf, ServiceBrowser
 
 # --- CONFIGURATION ---
 ALLOWED_MGMT_USERS = ["Admin", " Manager"] # Only these names can access management features
+
+# --- CHAT HISTORY ---
+CHAT_HISTORY_FILE = "chat_history.jsonl"
+MAX_HISTORY_LOAD = 100  # max messages to load on startup
 
 # --- STYLING (QSS) ---
 STYLESHEET = """
@@ -158,6 +163,7 @@ class DiscoveryWorker(QThread):
             self.user_found.emit(name.split('.')[0], f"{ip}:{info.port}")
             
     def update_service(self, zc, type, name):
+        """Method required by ServiceBrowser but no action is needed on update."""
         pass
             
     def remove_service(self, zc, type, name):
@@ -170,18 +176,49 @@ class CommsThread(QThread):
     file_rejected = pyqtSignal(str)
     port_bound = pyqtSignal(int)
     
-    def run(self):
+    def _bind_socket(self):
         server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        bound = False
         port = 5005
-        while not bound and port <= 5050:
+        while port <= 5050:
             try:
                 server.bind(('0.0.0.0', port))
-                bound = True
+                return server, port
             except OSError:
                 port += 1
-        
-        if not bound:
+        return None, None
+
+    def _receive_message(self, client):
+        buffer = ""
+        while True:
+            try:
+                chunk = client.recv(4096).decode()
+                if not chunk:
+                    break
+                buffer += chunk
+                if '\n' in buffer:
+                    break
+            except Exception:
+                break
+        return buffer.strip()
+
+    def _handle_payload(self, buffer, addr):
+        try:
+            data = json.loads(buffer)
+            msg_type = data.get('type')
+            if msg_type == 'chat':
+                self.incoming_chat.emit(addr[0], data['content'])
+            elif msg_type == 'file_req':
+                self.file_requested.emit(addr[0], data['filename'], data['size'], data.get('preview', ''))
+            elif msg_type == 'file_accept':
+                self.file_accepted.emit(addr[0], data['port'])
+            elif msg_type == 'file_reject':
+                self.file_rejected.emit(addr[0])
+        except (json.JSONDecodeError, KeyError):
+            pass # Invalid payload
+
+    def run(self):
+        server, port = self._bind_socket()
+        if not server:
             return # Could not bind
             
         self.port_bound.emit(port)
@@ -189,32 +226,9 @@ class CommsThread(QThread):
         
         while True:
             client, addr = server.accept()
-            # Read until newline
-            buffer = ""
-            while True:
-                chunk = client.recv(4096).decode()
-                if not chunk:
-                    break
-                buffer += chunk
-                if '\n' in buffer:
-                    break
-            
-            if not buffer:
-                client.close()
-                continue
-                
-            try:
-                data = json.loads(buffer.strip())
-                if data['type'] == 'chat':
-                    self.incoming_chat.emit(addr[0], data['content'])
-                elif data['type'] == 'file_req':
-                    self.file_requested.emit(addr[0], data['filename'], data['size'], data.get('preview', ''))
-                elif data['type'] == 'file_accept':
-                    self.file_accepted.emit(addr[0], data['port'])
-                elif data['type'] == 'file_reject':
-                    self.file_rejected.emit(addr[0])
-            except json.JSONDecodeError:
-                pass # Invalid payload
+            buffer = self._receive_message(client)
+            if buffer:
+                self._handle_payload(buffer, addr)
             client.close()
 
 class FileSenderThread(QThread):
@@ -372,10 +386,11 @@ class NotificationBubble(QWidget):
             self.opacity_anim.setEndValue(0)
             try:
                 self.opacity_anim.finished.disconnect()
-            except: pass
+            except Exception:
+                pass
             self.opacity_anim.finished.connect(self.close)
             self.opacity_anim.start()
-        except:
+        except Exception:
             self.close()
 
 class NotificationManager:
@@ -558,6 +573,7 @@ class OfficeLink(QMainWindow):
         self.pending_files = {}
         self.memory_files = {} # {filename: bytes}
         self.chat_history = [] # List of dicts: {"sender": ..., "msg": ..., "time": ...}
+        self.chat_history_lock = threading.Lock()
 
         self.notif_manager = NotificationManager()
         self.floating_icon = FloatingIcon(self)
@@ -637,8 +653,13 @@ class OfficeLink(QMainWindow):
         input_area = QHBoxLayout()
         self.file_btn = QPushButton()
         self.file_btn.setObjectName("file_btn")
-        self.file_btn.setIcon(QIcon("file_icon.svg"))
-        self.file_btn.setIconSize(QSize(24, 24))
+        # Try to load SVG icon, fallback to text if not found
+        file_icon_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "file_icon.svg")
+        if os.path.exists(file_icon_path):
+            self.file_btn.setIcon(QIcon(file_icon_path))
+            self.file_btn.setIconSize(QSize(24, 24))
+        else:
+            self.file_btn.setText("📎")
         self.file_btn.setToolTip("Attach File")
         
         self.input = QLineEdit()
@@ -741,26 +762,33 @@ class OfficeLink(QMainWindow):
                 self._drag_pos = event.globalPosition().toPoint() - self.frameGeometry().topLeft()
             event.accept()
 
+    def _handle_resize(self, event):
+        global_pos = event.globalPosition().toPoint()
+        geom = self.geometry()
+        min_w, min_h = 250, 400
+        
+        if self._resize_edge & 1: # Left
+            if geom.right() - global_pos.x() > min_w:
+                geom.setLeft(global_pos.x())
+        elif self._resize_edge & 2: # Right
+            if global_pos.x() - geom.left() > min_w:
+                geom.setRight(global_pos.x())
+            
+        if self._resize_edge & 4: # Top
+            if geom.bottom() - global_pos.y() > min_h:
+                geom.setTop(global_pos.y())
+        elif self._resize_edge & 8: # Bottom
+            if global_pos.y() - geom.top() > min_h:
+                geom.setBottom(global_pos.y())
+        
+        self.setGeometry(geom)
+
     def mouseMoveEvent(self, event):
         pos = event.position()
         
         if event.buttons() == Qt.MouseButton.LeftButton:
             if self._resize_edge:
-                global_pos = event.globalPosition().toPoint()
-                geom = self.geometry()
-                min_w, min_h = 250, 400
-                
-                if self._resize_edge & 1: # Left
-                    if geom.right() - global_pos.x() > min_w: geom.setLeft(global_pos.x())
-                elif self._resize_edge & 2: # Right
-                    if global_pos.x() - geom.left() > min_w: geom.setRight(global_pos.x())
-                    
-                if self._resize_edge & 4: # Top
-                    if geom.bottom() - global_pos.y() > min_h: geom.setTop(global_pos.y())
-                elif self._resize_edge & 8: # Bottom
-                    if global_pos.y() - geom.top() > min_h: geom.setBottom(global_pos.y())
-                
-                self.setGeometry(geom)
+                self._handle_resize(event)
             elif self._drag_pos is not None:
                 self.move(event.globalPosition().toPoint() - self._drag_pos)
             event.accept()
@@ -973,7 +1001,7 @@ class OfficeLink(QMainWindow):
             client.sendall((payload + '\n').encode())
             client.close()
             return True
-        except Exception as e:
+        except Exception:
             return False
 
     def send_chat(self):
@@ -1002,11 +1030,9 @@ class OfficeLink(QMainWindow):
         broadcast_msg = f"[BROADCAST] {msg}"
         self.input.clear()
         
-        success_count = 0
         for i in range(self.staff_list.count()):
             target = self.staff_list.item(i).data(Qt.ItemDataRole.UserRole)
-            if self.send_network_message(target, broadcast_msg):
-                success_count += 1
+            self.send_network_message(target, broadcast_msg)
                 
         self.insert_bubble("You", msg, is_self=True, is_broadcast=True)
         self.chat_history.append({"sender": "You", "msg": msg, "target": "BROADCAST"})
@@ -1015,7 +1041,8 @@ class OfficeLink(QMainWindow):
         # Play Notification Sound
         try:
             winsound.MessageBeep(winsound.MB_ICONASTERISK)
-        except: pass
+        except Exception:
+            pass
 
         # Try to resolve IP back to name
         sender_name = sender_ip
@@ -1052,7 +1079,8 @@ class OfficeLink(QMainWindow):
         # Play Notification Sound
         try:
             winsound.MessageBeep(winsound.MB_ICONEXCLAMATION)
-        except: pass
+        except Exception:
+            pass
                 
         msg = f"Incoming file from {sender_name}\n{safe_name} ({size_mb} MB)\n\nAccept?"
         
@@ -1187,7 +1215,7 @@ class OfficeLink(QMainWindow):
         file_path, _ = QFileDialog.getOpenFileName(self, "Select File")
         if file_path:
             target = selected[0].data(Qt.ItemDataRole.UserRole)
-            ip, port = target.split(':')
+            ip, _ = target.split(':')
             self.pending_files[ip] = file_path
             
             safe_name = html.escape(os.path.basename(file_path))
