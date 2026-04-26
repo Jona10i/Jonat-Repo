@@ -7,7 +7,7 @@ Requirements: Python 3.8+  (all libraries are built-in except nothing extra need
 import socket
 import threading
 import tkinter as tk
-from tkinter import ttk, scrolledtext, filedialog, messagebox
+from tkinter import ttk, scrolledtext, filedialog, messagebox, simpledialog
 import json
 import os
 import time
@@ -21,6 +21,7 @@ CHAT_PORT       = 55001   # TCP – chat messages
 FILE_PORT       = 55002   # TCP – file transfers
 BROADCAST_INTERVAL = 5    # seconds between presence broadcasts
 BUFFER_SIZE     = 4096
+CONFIG_FILE     = "lan_config.json"
 
 # ─────────────────────────────────────────────
 #  NETWORK HELPERS
@@ -37,9 +38,15 @@ def get_local_ip():
         s.close()
 
 def get_broadcast_address(local_ip):
-    """Return the subnet broadcast address (assumes /24)."""
-    parts = local_ip.rsplit(".", 1)
-    return parts[0] + ".255"
+    """Return the subnet broadcast address (tries to be smart)."""
+    try:
+        import ipaddress
+        # Assumes /24 by default, but attempts to be robust
+        net = ipaddress.IPv4Network(f"{local_ip}/255.255.255.0", strict=False)
+        return str(net.broadcast_address)
+    except Exception:
+        parts = local_ip.rsplit(".", 1)
+        return parts[0] + ".255"
 
 # ─────────────────────────────────────────────
 #  CORE APPLICATION
@@ -56,6 +63,15 @@ class LANOfficeApp:
         self.local_ip = get_local_ip()
         self.broadcast_addr = get_broadcast_address(self.local_ip)
 
+        # Set Icon
+        try:
+            icon_path = "app_icon.png"
+            if os.path.exists(icon_path):
+                self.icon_img = tk.PhotoImage(file=icon_path)
+                self.root.iconphoto(True, self.icon_img)
+        except Exception:
+            pass
+
         # {ip: {"name": str, "last_seen": float}}
         self.peers = {}
         self.peers_lock = threading.Lock()
@@ -63,7 +79,33 @@ class LANOfficeApp:
         self.running = False
         self.selected_peer_ip = None   # for direct messages
 
+        self._load_config()
         self._build_login_screen()
+
+    # ══════════════════════════════════════════
+    #  CONFIG & PERSISTENCE
+    # ══════════════════════════════════════════
+    def _load_config(self):
+        self.config = {"username": "", "download_dir": ""}
+        self.username = ""
+        self.download_dir = ""
+        if os.path.exists(CONFIG_FILE):
+            try:
+                with open(CONFIG_FILE, "r") as f:
+                    self.config = json.load(f)
+                    self.username = self.config.get("username", "")
+                    self.download_dir = self.config.get("download_dir", "")
+            except Exception:
+                pass
+
+    def _save_config(self):
+        self.config["username"] = self.username
+        self.config["download_dir"] = self.download_dir
+        try:
+            with open(CONFIG_FILE, "w") as f:
+                json.dump(self.config, f)
+        except Exception:
+            pass
 
     # ══════════════════════════════════════════
     #  LOGIN SCREEN
@@ -84,6 +126,9 @@ class LANOfficeApp:
                                    bg="#313244", fg="#cdd6f4", insertbackground="#cdd6f4",
                                    relief="flat", width=26, bd=8)
         self.name_entry.pack(pady=(4, 14))
+        if self.username:
+            self.name_entry.insert(0, self.username)
+            self.name_entry.selection_range(0, "end")
         self.name_entry.bind("<Return>", lambda e: self._start_app())
 
         join_btn = tk.Button(self.login_frame, text="Join Network →",
@@ -108,6 +153,7 @@ class LANOfficeApp:
             messagebox.showwarning("Name required", "Please enter a display name.")
             return
         self.username = name
+        self._save_config()
         self.login_frame.destroy()
         self._build_main_ui()
         self._start_networking()
@@ -145,6 +191,18 @@ class LANOfficeApp:
                                    font=("Segoe UI", 12, "bold"),
                                    bg="#181825", fg="#cdd6f4", padx=16)
         self.chat_title.pack(side="left", pady=10)
+
+        settings_btn = tk.Button(header, text="👤 Profile", font=("Segoe UI", 9),
+                                 bg="#313244", fg="#cdd6f4", relief="flat",
+                                 activebackground="#45475a", padx=10, cursor="hand2",
+                                 command=self._open_settings)
+        settings_btn.pack(side="right", pady=10, padx=10)
+
+        dl_btn = tk.Button(header, text="📂 Folder", font=("Segoe UI", 9),
+                           bg="#313244", fg="#cdd6f4", relief="flat",
+                           activebackground="#45475a", padx=10, cursor="hand2",
+                           command=self._open_download_settings)
+        dl_btn.pack(side="right", pady=10)
 
         self.dm_clear_btn = tk.Button(header, text="← Back to Group",
                                       font=("Segoe UI", 9), bg="#313244", fg="#89b4fa",
@@ -186,11 +244,22 @@ class LANOfficeApp:
                              command=self._send_message)
         send_btn.pack(side="left")
 
-        file_btn = tk.Button(input_bar, text="📎 File", font=("Segoe UI", 10),
-                             bg="#313244", fg="#cdd6f4", relief="flat",
-                             activebackground="#45475a", padx=10, cursor="hand2",
-                             command=self._send_file_dialog)
         file_btn.pack(side="left", padx=(6, 0))
+
+        # Progress bar (hidden by default)
+        self.progress_frame = tk.Frame(main, bg="#181825", height=4)
+        self.progress_frame.pack(fill="x", side="bottom")
+        
+        self.progress_val = tk.DoubleVar(value=0)
+        self.progress_bar = ttk.Progressbar(self.progress_frame, variable=self.progress_val,
+                                            maximum=100, mode="determinate")
+        # Style the progress bar
+        style = ttk.Style()
+        style.theme_use('default')
+        style.configure("TProgressbar", thickness=4, bordercolor="#181825", 
+                        background="#89b4fa", troughcolor="#181825")
+        self.progress_bar.pack(fill="x")
+        self.progress_frame.pack_forget() # hide initially
 
         self._log_system("Welcome to LAN Office! Discovering peers on your network…")
 
@@ -220,6 +289,24 @@ class LANOfficeApp:
         self.chat_display.insert("end", f"  📁 {text}\n", "file_recv")
         self.chat_display.config(state="disabled")
         self.chat_display.see("end")
+
+    def _open_settings(self):
+        new_name = tk.simpledialog.askstring("Profile", "Change your display name:",
+                                             initialvalue=self.username)
+        if new_name and new_name.strip() and new_name.strip() != self.username:
+            old_name = self.username
+            self.username = new_name.strip()
+            self._save_config()
+            self._log_system(f"You changed your name to {self.username}")
+            # The next presence broadcast will update others
+
+    def _open_download_settings(self):
+        path = filedialog.askdirectory(title="Select Default Downloads Folder",
+                                       initialdir=self.download_dir or os.path.expanduser("~"))
+        if path:
+            self.download_dir = path
+            self._save_config()
+            self._log_system(f"Downloads will now be saved to: {path}")
 
     # ══════════════════════════════════════════
     #  PEER SELECTION (DM vs GROUP)
@@ -326,13 +413,19 @@ class LANOfficeApp:
             s.sendall(struct.pack("!I", len(meta)) + meta)
 
             # File data
+            self.root.after(0, self._show_progress, True)
+            sent = 0
             with open(path, "rb") as f:
                 while True:
                     chunk = f.read(BUFFER_SIZE)
                     if not chunk:
                         break
                     s.sendall(chunk)
+                    sent += len(chunk)
+                    pct = (sent / filesize) * 100
+                    self.root.after(0, self.progress_val.set, pct)
             s.close()
+            self.root.after(0, self._show_progress, False)
 
             self.root.after(0, self._log_file,
                             f"Sent '{filename}' ({self._fmt_size(filesize)}) to "
@@ -347,6 +440,13 @@ class LANOfficeApp:
                 return f"{n:.1f} {unit}"
             n /= 1024
         return f"{n:.1f} TB"
+
+    def _show_progress(self, show=True):
+        if show:
+            self.progress_frame.pack(fill="x", side="bottom")
+            self.progress_val.set(0)
+        else:
+            self.progress_frame.pack_forget()
 
     # ══════════════════════════════════════════
     #  NETWORKING – START
@@ -371,6 +471,13 @@ class LANOfficeApp:
             except Exception:
                 pass
             time.sleep(BROADCAST_INTERVAL)
+        # Send leave message before closing
+        try:
+            leave_payload = json.dumps({"type": "leave", "name": self.username,
+                                        "ip": self.local_ip}).encode()
+            sock.sendto(leave_payload, (self.broadcast_addr, BROADCAST_PORT))
+        except Exception:
+            pass
         sock.close()
 
     def _listen_presence(self):
@@ -392,6 +499,13 @@ class LANOfficeApp:
                         self.root.after(0, self._on_peer_join, ip, name)
                     else:
                         self.root.after(0, self._refresh_peers_list)
+                elif msg.get("type") == "leave":
+                    ip = addr[0]
+                    name = msg.get("name", ip)
+                    with self.peers_lock:
+                        if ip in self.peers:
+                            del self.peers[ip]
+                    self.root.after(0, self._on_peer_leave, name)
             except socket.timeout:
                 pass
             except Exception:
@@ -510,9 +624,16 @@ class LANOfficeApp:
                     f"{sender} wants to send you:\n{filename} "
                     f"({self._fmt_size(filesize)})\n\nAccept?")
                 if answer:
-                    p = filedialog.asksaveasfilename(
-                        initialfile=filename,
-                        title="Save file as")
+                    if self.download_dir and os.path.exists(self.download_dir):
+                        p = os.path.join(self.download_dir, filename)
+                        # Check for collision
+                        if os.path.exists(p):
+                            base, ext = os.path.splitext(filename)
+                            p = os.path.join(self.download_dir, f"{base}_{int(time.time())}{ext}")
+                    else:
+                        p = filedialog.asksaveasfilename(
+                            initialfile=filename,
+                            title="Save file as")
                     save_path_holder[0] = p
                 done_event.set()
 
@@ -525,6 +646,7 @@ class LANOfficeApp:
                 return
 
             received = 0
+            self.root.after(0, self._show_progress, True)
             with open(save_path, "wb") as f:
                 while received < filesize:
                     chunk = conn.recv(min(BUFFER_SIZE, filesize - received))
@@ -532,6 +654,9 @@ class LANOfficeApp:
                         break
                     f.write(chunk)
                     received += len(chunk)
+                    pct = (received / filesize) * 100
+                    self.root.after(0, self.progress_val.set, pct)
+            self.root.after(0, self._show_progress, False)
 
             self.root.after(0, self._log_file,
                             f"Received '{filename}' from {sender} → saved to {save_path}")
