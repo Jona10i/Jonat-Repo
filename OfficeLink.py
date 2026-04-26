@@ -5,20 +5,27 @@ import socket
 import base64
 import io
 import html
+import winsound
+from datetime import datetime
 from PIL import Image
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QHBoxLayout, 
                              QVBoxLayout, QListWidget, QTextEdit, QLineEdit, 
                              QPushButton, QLabel, QFileDialog, QMessageBox, QProgressBar,
                              QSystemTrayIcon, QMenu, QDialog, QFormLayout, QCheckBox,
-                             QListWidgetItem)
-from PyQt6.QtCore import Qt, QThread, pyqtSignal, QSize, QSettings
+                             QListWidgetItem, QTextBrowser, QGraphicsDropShadowEffect)
+from PyQt6.QtCore import (Qt, QThread, pyqtSignal, QSize, QSettings, 
+                            QPropertyAnimation, QEasingCurve, QPoint, QTimer, QRect,
+                            QParallelAnimationGroup)
 from PyQt6.QtGui import QIcon, QPixmap, QImage, QAction
 from zeroconf import ServiceInfo, Zeroconf, ServiceBrowser
+
+# --- CONFIGURATION ---
+ALLOWED_MGMT_USERS = ["Admin", " Manager"] # Only these names can access management features
 
 # --- STYLING (QSS) ---
 STYLESHEET = """
     QWidget {
-        font-family: 'JetBrains Mono', Consolas, monospace;
+        font-family: 'Montserrat', 'Segoe UI', sans-serif;
     }
     #centralFrame {
         background-color: rgba(240, 242, 245, 230);
@@ -65,9 +72,19 @@ STYLESHEET = """
     #min_btn:hover { background-color: #dea123; }
     #settings_btn { background-color: rgba(100,100,100,0.15); border-radius: 12px; color: #444; font-size: 14px; padding: 2px 6px; border: none; }
     #settings_btn:hover { background-color: rgba(100,100,100,0.3); }
-    #username_label { font-size: 12px; font-weight: bold; color: #1976d2; padding: 2px 6px;
-        background: rgba(25,118,210,0.08); border-radius: 8px; }
-    #username_label:hover { background: rgba(25,118,210,0.18); }
+    #username_label { 
+        font-size: 13px; 
+        font-weight: bold; 
+        color: white; 
+        padding: 4px 12px;
+        background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #1976d2, stop:1 #64b5f6); 
+        border-radius: 12px;
+        border: 1px solid rgba(255,255,255,0.2);
+    }
+    #username_label:hover { 
+        background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #1565c0, stop:1 #42a5f5); 
+        border: 1px solid rgba(255,255,255,0.5);
+    }
     #mgmt_badge { font-size: 10px; font-weight: bold; color: white;
         background-color: #e65100; border-radius: 6px; padding: 1px 5px; }
     #transfer_bar_widget {
@@ -286,53 +303,198 @@ class FileReceiverThread(QThread):
         finally:
             server.close()
 
+
+class NotificationBubble(QWidget):
+    def __init__(self, title, message):
+        super().__init__()
+        self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint | Qt.WindowType.Tool)
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+        self.setFixedSize(240, 90)
+        
+        layout = QVBoxLayout(self)
+        self.frame = QWidget()
+        self.frame.setObjectName("bubbleFrame")
+        self.frame.setStyleSheet("""
+            #bubbleFrame {
+                background-color: rgba(255, 255, 255, 0.95);
+                border: 1px solid rgba(25, 118, 210, 0.2);
+                border-radius: 18px;
+            }
+        """)
+        
+        shadow = QGraphicsDropShadowEffect(self)
+        shadow.setBlurRadius(20)
+        shadow.setColor(Qt.GlobalColor.black)
+        shadow.setOffset(0, 5)
+        self.frame.setGraphicsEffect(shadow)
+        
+        frame_layout = QVBoxLayout(self.frame)
+        self.title_label = QLabel(title)
+        self.title_label.setStyleSheet("font-weight: bold; color: #1976d2; font-size: 13px;")
+        self.msg_label = QLabel(message)
+        self.msg_label.setStyleSheet("color: #333; font-size: 12px;")
+        self.msg_label.setWordWrap(True)
+        self.msg_label.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
+        
+        frame_layout.addWidget(self.title_label)
+        frame_layout.addWidget(self.msg_label)
+        layout.addWidget(self.frame)
+        
+        self.opacity_anim = QPropertyAnimation(self, b"windowOpacity")
+        self.opacity_anim.setDuration(600)
+        
+        self.pos_anim = QPropertyAnimation(self, b"pos")
+        self.pos_anim.setDuration(600)
+        self.pos_anim.setEasingCurve(QEasingCurve.Type.OutBack)
+        
+        self.timer = QTimer(self)
+        self.timer.setSingleShot(True)
+        self.timer.timeout.connect(self.fade_out)
+
+    def show_bubble(self, start_pos, end_pos):
+        self.move(start_pos)
+        self.setWindowOpacity(0)
+        self.show()
+        
+        self.opacity_anim.setStartValue(0)
+        self.opacity_anim.setEndValue(1)
+        self.pos_anim.setStartValue(start_pos)
+        self.pos_anim.setEndValue(end_pos)
+        
+        self.opacity_anim.start()
+        self.pos_anim.start()
+        self.timer.start(4500)
+
+    def fade_out(self):
+        try:
+            self.opacity_anim.stop()
+            self.opacity_anim.setStartValue(self.windowOpacity())
+            self.opacity_anim.setEndValue(0)
+            try:
+                self.opacity_anim.finished.disconnect()
+            except: pass
+            self.opacity_anim.finished.connect(self.close)
+            self.opacity_anim.start()
+        except:
+            self.close()
+
+class NotificationManager:
+    def __init__(self):
+        self.active_bubbles = []
+        
+    def show_notification(self, title, message):
+        bubble = NotificationBubble(title, message)
+        self.active_bubbles.append(bubble)
+        
+        screen = QApplication.primaryScreen().availableGeometry()
+        # Stack from bottom-right
+        margin = 20
+        bubble_height = 95
+        x = screen.x() + screen.width() - 250 - margin
+        
+        # Calculate Y based on current bubbles
+        idx = len(self.active_bubbles) - 1
+        y = screen.y() + screen.height() - (idx + 1) * bubble_height - margin
+        
+        if y < screen.y() + margin:
+            # Shift or clear if too many
+            y = screen.y() + screen.height() - bubble_height - margin
+            
+        start_pos = QPoint(screen.x() + screen.width(), y)
+        end_pos = QPoint(x, y)
+        
+        bubble.show_bubble(start_pos, end_pos)
+        # Use a lambda that safely handles the removal
+        bubble.destroyed.connect(lambda: self.on_bubble_destroyed(bubble))
+
+    def on_bubble_destroyed(self, bubble):
+        if bubble in self.active_bubbles:
+            self.active_bubbles.remove(bubble)
+
 class FloatingIcon(QWidget):
     def __init__(self, main_window):
         super().__init__()
         self.main_window = main_window
         self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint | Qt.WindowType.Tool)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
-        self.resize(60, 60)
+        self.resize(75, 75)
         
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setContentsMargins(5, 5, 5, 5)
         self.btn = QPushButton()
-        self.btn.setFixedSize(50, 50)
-        self.btn.setStyleSheet("""
-            QPushButton {
-                background-color: #1976d2;
-                border-radius: 25px;
-                color: white;
-                font-weight: bold;
-                font-size: 20px;
-                border: 2px solid white;
-            }
-            QPushButton:hover {
-                background-color: #1565c0;
-            }
-        """)
+        self.btn.setFixedSize(65, 65)
+        self.update_style(False)
         
         icon_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "app_icon.png")
         if os.path.exists(icon_path):
             self.btn.setIcon(QIcon(icon_path))
-            self.btn.setIconSize(QSize(30, 30))
+            self.btn.setIconSize(QSize(35, 35))
         else:
             self.btn.setText("OL")
             
         self.btn.clicked.connect(self.restore_main)
         layout.addWidget(self.btn)
         
+        shadow = QGraphicsDropShadowEffect(self)
+        shadow.setBlurRadius(15)
+        shadow.setColor(Qt.GlobalColor.black)
+        shadow.setOffset(0, 4)
+        self.btn.setGraphicsEffect(shadow)
+        
+        self._drag_pos = None
+
+    def update_style(self, alerting=False):
+        color1 = "#ff5252" if alerting else "#1976d2"
+        color2 = "#ff1744" if alerting else "#42a5f5"
+        self.btn.setStyleSheet(f"""
+            QPushButton {{
+                background: qradialgradient(cx:0.3, cy:0.3, radius:1, fx:0.3, fy:0.3, stop:0 {color2}, stop:1 {color1});
+                border-radius: 32px;
+                color: white;
+                font-weight: bold;
+                font-size: 22px;
+                border: 3px solid rgba(255, 255, 255, 0.8);
+            }}
+            QPushButton:hover {{
+                border: 3px solid white;
+            }}
+        """)
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton:
+            self._drag_pos = event.globalPosition().toPoint() - self.frameGeometry().topLeft()
+            event.accept()
+
+    def mouseMoveEvent(self, event):
+        if self._drag_pos is not None and event.buttons() == Qt.MouseButton.LeftButton:
+            self.move(event.globalPosition().toPoint() - self._drag_pos)
+            event.accept()
+
+    def mouseReleaseEvent(self, event):
+        self._drag_pos = None
+        event.accept()
+        
+    def pulse(self):
+        self.update_style(True)
+        # Pulse animation using opacity or scale would be complex for a simple pulse
+        # Let's just flicker the style for now or use a quick timer
+        QTimer.singleShot(2000, lambda: self.update_style(False))
+
     def restore_main(self):
         self.hide()
+        # Restore with expansion animation
         self.main_window.showNormal()
         self.main_window.raise_()
         self.main_window.activateWindow()
+        
+        # Trigger restore animation in main window
+        self.main_window.animate_restore()
 
     def position_bottom_right(self):
         screen = QApplication.primaryScreen()
         if screen:
             geom = screen.availableGeometry()
-            self.move(geom.x() + geom.width() - 80, geom.y() + geom.height() - 80)
+            self.move(geom.x() + geom.width() - 90, geom.y() + geom.height() - 90)
         else:
             self.move(800, 800)
 
@@ -341,7 +503,7 @@ class OfficeLink(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("OfficeLink LAN")
-        self.resize(300, 450)
+        self.resize(260, 420)
         
         # Frameless and translucent to enable custom rounded edges
         self.setWindowFlags(Qt.WindowType.FramelessWindowHint)
@@ -351,8 +513,8 @@ class OfficeLink(QMainWindow):
         screen = QApplication.primaryScreen()
         if screen:
             geom = screen.availableGeometry()
-            x = geom.x() + int(geom.width() * 0.72)
-            y = geom.y() + (geom.height() - 450) // 2
+            x = geom.x() + geom.width() - 280
+            y = geom.y() + (geom.height() - 420) // 2
             self.move(x, y)
         else:
             self.move(900, 200)
@@ -362,6 +524,11 @@ class OfficeLink(QMainWindow):
         self.settings = QSettings("RCNMedia", "OfficeLink")
         self.username = self.settings.value("username", socket.gethostname())
         self.is_mgmt = self.settings.value("is_mgmt", False, type=bool)
+        
+        # Enforce management restriction on startup
+        if self.username not in ALLOWED_MGMT_USERS:
+            self.is_mgmt = False
+            self.settings.setValue("is_mgmt", False)
         
         # Load App Icon if available
         icon_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "app_icon.png")
@@ -392,6 +559,7 @@ class OfficeLink(QMainWindow):
         self.memory_files = {} # {filename: bytes}
         self.chat_history = [] # List of dicts: {"sender": ..., "msg": ..., "time": ...}
 
+        self.notif_manager = NotificationManager()
         self.floating_icon = FloatingIcon(self)
         
         # UI Layout
@@ -459,7 +627,9 @@ class OfficeLink(QMainWindow):
         
         # Chat Area
         chat_widget = QWidget()
-        self.display = QTextEdit()
+        chat_layout = QVBoxLayout(chat_widget)
+        chat_layout.setContentsMargins(0, 0, 0, 0)
+        self.display = QTextBrowser()
         self.display.setReadOnly(True)
         self.display.setOpenExternalLinks(False)
         self.display.anchorClicked.connect(self.handle_link)
@@ -538,23 +708,115 @@ class OfficeLink(QMainWindow):
         # Connections
         self.file_btn.clicked.connect(self.send_file_init)
 
-        # Drag state
+        # Drag/Resize state
         self._drag_pos = None
+        self._resize_edge = 0 # 1:L, 2:R, 4:T, 8:B
+        self.setMouseTracking(True)
+        central.setMouseTracking(True)
         
-    # --- Drag-to-move support ---
+    # --- Drag-to-move & Resize support ---
+    def get_resize_edge(self, pos):
+        rect = self.rect()
+        margin = 6 # Reduced for easier dragging
+        edge = 0
+        if pos.x() < margin: edge |= 1
+        if pos.x() > rect.width() - margin: edge |= 2
+        if pos.y() < margin: edge |= 4
+        if pos.y() > rect.height() - margin: edge |= 8
+        return edge
+
+    def get_cursor_for_edge(self, edge):
+        if edge in [5, 10]: return Qt.CursorShape.SizeFDiagCursor # TL, BR
+        if edge in [6, 9]: return Qt.CursorShape.SizeBDiagCursor  # TR, BL
+        if edge in [1, 2]: return Qt.CursorShape.SizeHorCursor   # L, R
+        if edge in [4, 8]: return Qt.CursorShape.SizeVerCursor   # T, B
+        return Qt.CursorShape.ArrowCursor
+
     def mousePressEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton:
-            self._drag_pos = event.globalPosition().toPoint() - self.frameGeometry().topLeft()
+            pos = event.position()
+            self._resize_edge = self.get_resize_edge(pos)
+            
+            if not self._resize_edge:
+                self._drag_pos = event.globalPosition().toPoint() - self.frameGeometry().topLeft()
             event.accept()
 
     def mouseMoveEvent(self, event):
-        if self._drag_pos is not None and event.buttons() == Qt.MouseButton.LeftButton:
-            self.move(event.globalPosition().toPoint() - self._drag_pos)
+        pos = event.position()
+        
+        if event.buttons() == Qt.MouseButton.LeftButton:
+            if self._resize_edge:
+                global_pos = event.globalPosition().toPoint()
+                geom = self.geometry()
+                min_w, min_h = 250, 400
+                
+                if self._resize_edge & 1: # Left
+                    if geom.right() - global_pos.x() > min_w: geom.setLeft(global_pos.x())
+                elif self._resize_edge & 2: # Right
+                    if global_pos.x() - geom.left() > min_w: geom.setRight(global_pos.x())
+                    
+                if self._resize_edge & 4: # Top
+                    if geom.bottom() - global_pos.y() > min_h: geom.setTop(global_pos.y())
+                elif self._resize_edge & 8: # Bottom
+                    if global_pos.y() - geom.top() > min_h: geom.setBottom(global_pos.y())
+                
+                self.setGeometry(geom)
+            elif self._drag_pos is not None:
+                self.move(event.globalPosition().toPoint() - self._drag_pos)
             event.accept()
+        else:
+            # Update cursor shape on hover
+            self.setCursor(self.get_cursor_for_edge(self.get_resize_edge(pos)))
 
     def mouseReleaseEvent(self, event):
         self._drag_pos = None
+        self._resize_edge = 0
         event.accept()
+
+    def insert_bubble(self, sender, msg, is_self=False, is_broadcast=False):
+        time_str = datetime.now().strftime("%H:%M")
+        safe_msg = html.escape(msg).replace('\n', '<br>')
+        
+        # Premium Colors
+        my_bg = "#1976d2"
+        other_bg = "white"
+        broadcast_bg = "#e65100"
+        
+        if is_self:
+            bg = broadcast_bg if is_broadcast else my_bg
+            color = "white"
+            bubble_html = f"""
+                <table width="100%">
+                    <tr>
+                        <td width="15%"></td>
+                        <td align="right">
+                            <div style="background-color: {bg}; color: {color}; border-radius: 12px; padding: 10px; border: 1px solid rgba(0,0,0,0.1); font-family: 'Montserrat', 'Segoe UI', sans-serif;">
+                                <span style="font-size: 10px; font-weight: bold; opacity: 0.8;">{"Broadcast" if is_broadcast else "You"} • {time_str}</span><br>
+                                <span style="font-size: 13px;">{safe_msg}</span>
+                            </div>
+                        </td>
+                    </tr>
+                </table>
+            """
+        else:
+            bubble_html = f"""
+                <table width="100%">
+                    <tr>
+                        <td align="left">
+                            <div style="background-color: {other_bg}; color: #333; border-radius: 12px; padding: 10px; border: 1px solid #ddd; font-family: 'Montserrat', 'Segoe UI', sans-serif;">
+                                <span style="font-size: 10px; font-weight: bold; color: #1976d2;">{sender} • {time_str}</span><br>
+                                <span style="font-size: 13px;">{safe_msg}</span>
+                            </div>
+                        </td>
+                        <td width="15%"></td>
+                    </tr>
+                </table>
+            """
+        
+        self.display.append("")
+        self.display.insertHtml(bubble_html)
+        # Scroll to bottom
+        self.display.verticalScrollBar().setValue(self.display.verticalScrollBar().maximum())
 
     def inline_rename(self):
         """Quick inline username rename via a simple input dialog."""
@@ -567,6 +829,14 @@ class OfficeLink(QMainWindow):
             self.username = new_name.strip()
             self.settings.setValue("username", self.username)
             self.username_label.setText(f"👤 {self.username}")
+            
+            # Auto-disable management if new name is not allowed
+            if self.username not in ALLOWED_MGMT_USERS:
+                self.is_mgmt = False
+                self.settings.setValue("is_mgmt", False)
+                self.mgmt_badge.setVisible(False)
+                self.broadcast_btn.setVisible(False)
+            
             if hasattr(self, 'discovery'):
                 self.discovery.update_username(self.username)
 
@@ -577,7 +847,13 @@ class OfficeLink(QMainWindow):
         
         name_input = QLineEdit(self.username)
         mgmt_checkbox = QCheckBox("Management Mode  (enables Broadcast button)")
-        mgmt_checkbox.setChecked(self.is_mgmt)
+        
+        # Restriction logic
+        can_be_mgmt = self.username in ALLOWED_MGMT_USERS
+        mgmt_checkbox.setEnabled(can_be_mgmt)
+        mgmt_checkbox.setChecked(self.is_mgmt if can_be_mgmt else False)
+        if not can_be_mgmt:
+            mgmt_checkbox.setToolTip("Restricted to management staff only.")
         
         save_btn = QPushButton("Save")
         save_btn.clicked.connect(dialog.accept)
@@ -601,9 +877,69 @@ class OfficeLink(QMainWindow):
             self.mgmt_badge.setVisible(self.is_mgmt)
             
     def custom_minimize(self):
+        self._pre_min_geom = self.geometry()
+        
+        # Parallel animation for smoother feel
+        self.min_group = QParallelAnimationGroup()
+        
+        self.min_anim = QPropertyAnimation(self, b"geometry")
+        self.min_anim.setDuration(450)
+        
+        screen = QApplication.primaryScreen().availableGeometry()
+        target_x = screen.x() + screen.width() - 80
+        target_y = screen.y() + screen.height() - 80
+        target_geom = QRect(target_x, target_y, 40, 40)
+        
+        self.min_anim.setStartValue(self._pre_min_geom)
+        self.min_anim.setEndValue(target_geom)
+        self.min_anim.setEasingCurve(QEasingCurve.Type.OutQuint)
+        
+        self.min_fade = QPropertyAnimation(self, b"windowOpacity")
+        self.min_fade.setDuration(400)
+        self.min_fade.setStartValue(1.0)
+        self.min_fade.setEndValue(0.0)
+        
+        self.min_group.addAnimation(self.min_anim)
+        self.min_group.addAnimation(self.min_fade)
+        self.min_group.finished.connect(self._finish_minimize)
+        self.min_group.start()
+
+    def _finish_minimize(self):
         self.hide()
+        self.setWindowOpacity(1.0)
+        self.setGeometry(self._pre_min_geom)
         self.floating_icon.position_bottom_right()
         self.floating_icon.show()
+        self.floating_icon.pulse()
+
+    def animate_restore(self):
+        self.setWindowOpacity(0.0)
+        
+        # Use the stored pre-minimize geometry as the target
+        target_geom = getattr(self, '_pre_min_geom', self.geometry())
+        
+        # Start the expansion from wherever the floating bubble head currently is
+        bubble_center = self.floating_icon.geometry().center()
+        start_geom = QRect(bubble_center.x() - 20, bubble_center.y() - 20, 40, 40)
+        
+        self.setGeometry(start_geom)
+        
+        self.res_group = QParallelAnimationGroup()
+        
+        self.res_anim = QPropertyAnimation(self, b"geometry")
+        self.res_anim.setDuration(600)
+        self.res_anim.setStartValue(start_geom)
+        self.res_anim.setEndValue(target_geom)
+        self.res_anim.setEasingCurve(QEasingCurve.Type.OutElastic)
+        
+        self.res_fade = QPropertyAnimation(self, b"windowOpacity")
+        self.res_fade.setDuration(350)
+        self.res_fade.setStartValue(0.0)
+        self.res_fade.setEndValue(1.0)
+        
+        self.res_group.addAnimation(self.res_anim)
+        self.res_group.addAnimation(self.res_fade)
+        self.res_group.start()
         
     def on_port_bound(self, port):
         self.discovery = DiscoveryWorker(port, self.username)
@@ -653,9 +989,8 @@ class OfficeLink(QMainWindow):
         
         if self.send_network_message(target, msg):
             self.input.clear()
-            safe_msg = html.escape(msg)
+            self.insert_bubble("You", msg, is_self=True)
             target_name = selected[0].text().split()[0]
-            self.display.append(f"<b>You (to {target_name}):</b> {safe_msg}")
             self.chat_history.append({"sender": "You", "msg": msg, "target": target_name})
         else:
             QMessageBox.warning(self, "Error", "Failed to send message.")
@@ -673,13 +1008,15 @@ class OfficeLink(QMainWindow):
             if self.send_network_message(target, broadcast_msg):
                 success_count += 1
                 
-        safe_msg = html.escape(msg)
-        self.display.append(f"<b style='color:red;'>You (Broadcast to {success_count} users):</b> {safe_msg}")
+        self.insert_bubble("You", msg, is_self=True, is_broadcast=True)
         self.chat_history.append({"sender": "You", "msg": msg, "target": "BROADCAST"})
 
     def on_message(self, sender_ip, msg):
-        safe_msg = html.escape(msg)
-        
+        # Play Notification Sound
+        try:
+            winsound.MessageBeep(winsound.MB_ICONASTERISK)
+        except: pass
+
         # Try to resolve IP back to name
         sender_name = sender_ip
         for i in range(self.staff_list.count()):
@@ -688,11 +1025,16 @@ class OfficeLink(QMainWindow):
                 sender_name = item_text.split()[0]
                 break
                 
-        self.display.append(f"<b>{sender_name}:</b> {safe_msg}")
+        self.insert_bubble(sender_name, msg, is_self=False)
         self.chat_history.append({"sender": sender_name, "msg": msg})
+        
+        # Show Bubble Notification
+        self.notif_manager.show_notification(f"Message from {sender_name}", msg)
         
         if not self.isActiveWindow():
             self.tray_icon.showMessage("New Message", f"{sender_name}: {msg}", QSystemTrayIcon.MessageIcon.Information, 3000)
+            if self.floating_icon.isVisible():
+                self.floating_icon.pulse()
         
     def on_file_request(self, sender_ip, name, size, preview):
         size_mb = round(size/1048576, 2)
@@ -707,10 +1049,18 @@ class OfficeLink(QMainWindow):
                 sender_port = item.data(Qt.ItemDataRole.UserRole).split(':')[1]
                 break
                 
+        # Play Notification Sound
+        try:
+            winsound.MessageBeep(winsound.MB_ICONEXCLAMATION)
+        except: pass
+                
         msg = f"Incoming file from {sender_name}\n{safe_name} ({size_mb} MB)\n\nAccept?"
         
         if not self.isActiveWindow():
             self.tray_icon.showMessage("File Request", f"{sender_name} wants to send {name}", QSystemTrayIcon.MessageIcon.Information, 3000)
+            
+        # Show Bubble Notification
+        self.notif_manager.show_notification(f"File from {sender_name}", f"Wants to send: {name} ({size_mb} MB)")
             
         reply = QMessageBox.question(self, "File Request", msg)
         if reply == QMessageBox.StandardButton.Yes and sender_port:
