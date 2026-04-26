@@ -323,6 +323,10 @@ class LANOfficeApp:
                              command=self._send_message)
         send_btn.pack(side="left")
 
+        file_btn = tk.Button(input_bar, text="📎 File", font=(DEFAULT_FONT_FAMILY, 9),
+                             bg="#313244", fg="#cdd6f4", relief="flat",
+                             activebackground="#45475a", padx=10, cursor="hand2",
+                             command=self._send_file_dialog)
         file_btn.pack(side="left", padx=(6, 0))
 
         # Progress bar (hidden by default)
