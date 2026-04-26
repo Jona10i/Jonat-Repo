@@ -12,6 +12,8 @@ import json
 import os
 import time
 import struct
+import logging
+import traceback
 
 # ─────────────────────────────────────────────
 #  CONFIGURATION
@@ -20,6 +22,8 @@ BROADCAST_PORT  = 55000   # UDP – user discovery / presence
 CHAT_PORT       = 55001   # TCP – chat messages
 FILE_PORT       = 55002   # TCP – file transfers
 BROADCAST_INTERVAL = 5    # seconds between presence broadcasts
+CHAT_HISTORY_FILE = "chat_history.jsonl"
+MAX_HISTORY_LOAD = 100
 BUFFER_SIZE     = 4096
 CONFIG_FILE     = "lan_config.json"
 
@@ -63,6 +67,27 @@ class LANOfficeApp:
         self.local_ip = get_local_ip()
         self.broadcast_addr = get_broadcast_address(self.local_ip)
 
+        # Set up logging
+        self.logger = logging.getLogger(f"LANOffice-{self.local_ip}")
+        self.logger.setLevel(logging.DEBUG)
+
+        # Console handler
+        ch = logging.StreamHandler()
+        ch.setLevel(logging.INFO)
+        ch_formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+        ch.setFormatter(ch_formatter)
+
+        # File handler
+        fh = logging.FileHandler('lan_office.log', encoding='utf-8')
+        fh.setLevel(logging.DEBUG)
+        fh_formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+        fh.setFormatter(fh_formatter)
+
+        self.logger.addHandler(ch)
+        self.logger.addHandler(fh)
+
+        self.logger.info(f"LAN Office started. IP: {self.local_ip}, Broadcast: {self.broadcast_addr}")
+
         # Set Icon
         try:
             icon_path = "app_icon.png"
@@ -70,7 +95,7 @@ class LANOfficeApp:
                 self.icon_img = tk.PhotoImage(file=icon_path)
                 self.root.iconphoto(True, self.icon_img)
         except Exception:
-            pass
+            self.logger.debug("Failed to load app icon", exc_info=True)
 
         # {ip: {"name": str, "last_seen": float}}
         self.peers = {}
@@ -78,6 +103,9 @@ class LANOfficeApp:
 
         self.running = False
         self.selected_peer_ip = None   # for direct messages
+
+        self.chat_history = []
+        self.chat_history_lock = threading.Lock()
 
         self._load_config()
         self._build_login_screen()
@@ -96,7 +124,7 @@ class LANOfficeApp:
                     self.username = self.config.get("username", "")
                     self.download_dir = self.config.get("download_dir", "")
             except Exception:
-                pass
+                self.logger.debug("Failed to load config file", exc_info=True)
 
     def _save_config(self):
         self.config["username"] = self.username
@@ -105,7 +133,42 @@ class LANOfficeApp:
             with open(CONFIG_FILE, "w") as f:
                 json.dump(self.config, f)
         except Exception:
-            pass
+            self.logger.error("Failed to save config", exc_info=True)
+
+    def _load_chat_history(self):
+        """Load recent chat history from file."""
+        if not os.path.exists(CHAT_HISTORY_FILE):
+            return
+        try:
+            with open(CHAT_HISTORY_FILE, "r", encoding="utf-8") as f:
+                lines = f.readlines()
+            for line in lines[-MAX_HISTORY_LOAD:]:
+                try:
+                    msg = json.loads(line.strip())
+                    self.chat_history.append(msg)
+                except Exception:
+                    continue
+        except Exception as e:
+            self.logger.debug(f"Failed to load chat history: {e}")
+
+    def _save_message(self, sender_name, text, is_self=False, is_system=False, filename=None):
+        """Save a message to history file."""
+        msg = {
+            "timestamp": time.time(),
+            "time_str": time.strftime("%Y-%m-%d %H:%M:%S"),
+            "sender": sender_name,
+            "text": text,
+            "is_self": is_self,
+            "is_system": is_system,
+            "filename": filename
+        }
+        with self.chat_history_lock:
+            self.chat_history.append(msg)
+        try:
+            with open(CHAT_HISTORY_FILE, "a", encoding="utf-8") as f:
+                f.write(json.dumps(msg) + "\n")
+        except Exception as e:
+            self.logger.error(f"Failed to save message: {e}")
 
     # ══════════════════════════════════════════
     #  LOGIN SCREEN
@@ -156,6 +219,15 @@ class LANOfficeApp:
         self._save_config()
         self.login_frame.destroy()
         self._build_main_ui()
+        self._load_chat_history()
+        # Replay history
+        for msg in self.chat_history:
+            if msg.get("is_system"):
+                self._log_system(msg["text"])
+            elif msg.get("filename"):
+                self._log_file(f"Received '{msg['filename']}' from {msg['sender']} → saved to [previous location]", filename=msg["filename"])
+            else:
+                self._log_message(msg["sender"], msg["text"], is_self=msg.get("is_self", False))
         self._start_networking()
 
     def _build_main_ui(self):
@@ -197,6 +269,12 @@ class LANOfficeApp:
                                  activebackground="#45475a", padx=10, cursor="hand2",
                                  command=self._open_settings)
         settings_btn.pack(side="right", pady=10, padx=10)
+
+        clear_btn = tk.Button(header, text="🗑️ Clear", font=("Segoe UI", 9),
+                              bg="#313244", fg="#cdd6f4", relief="flat",
+                              activebackground="#45475a", padx=10, cursor="hand2",
+                              command=self._clear_chat_history)
+        clear_btn.pack(side="right", pady=10, padx=(0, 6))
 
         dl_btn = tk.Button(header, text="📂 Folder", font=("Segoe UI", 9),
                            bg="#313244", fg="#cdd6f4", relief="flat",
@@ -276,6 +354,7 @@ class LANOfficeApp:
         self.chat_display.insert("end", text + "\n", msg_tag)
         self.chat_display.config(state="disabled")
         self.chat_display.see("end")
+        self._save_message(sender_name, text, is_self=is_self)
 
     def _log_system(self, text):
         self.chat_display.config(state="normal")
@@ -283,12 +362,14 @@ class LANOfficeApp:
         self.chat_display.insert("end", f"[{ts}] ● {text}\n", "msg_system")
         self.chat_display.config(state="disabled")
         self.chat_display.see("end")
+        self._save_message("SYSTEM", text, is_system=True)
 
-    def _log_file(self, text):
+    def _log_file(self, text, filename=None):
         self.chat_display.config(state="normal")
         self.chat_display.insert("end", f"  📁 {text}\n", "file_recv")
         self.chat_display.config(state="disabled")
         self.chat_display.see("end")
+        self._save_message("FILE", text, filename=filename)
 
     def _open_settings(self):
         new_name = tk.simpledialog.askstring("Profile", "Change your display name:",
@@ -332,6 +413,19 @@ class LANOfficeApp:
         self.chat_title.config(text="💬  Group Chat")
         self.dm_clear_btn.pack_forget()
 
+    def _clear_chat_history(self):
+        if messagebox.askyesno("Clear Chat", "Delete all chat history?"):
+            self.chat_history.clear()
+            if os.path.exists(CHAT_HISTORY_FILE):
+                try:
+                    os.remove(CHAT_HISTORY_FILE)
+                except Exception as e:
+                    self.logger.error(f"Failed to delete history file: {e}")
+            self.chat_display.config(state="normal")
+            self.chat_display.delete(1.0, "end")
+            self.chat_display.config(state="disabled")
+            self._log_system("Chat history cleared.")
+
     # ══════════════════════════════════════════
     #  SENDING
     # ══════════════════════════════════════════
@@ -371,8 +465,8 @@ class LANOfficeApp:
             # Prefix length so receiver knows where message ends
             s.sendall(struct.pack("!I", len(data)) + data)
             s.close()
-        except Exception:
-            pass
+        except Exception as e:
+            self.logger.debug(f"TCP connection error to {ip}:{port}: {e}")
 
     def _send_file_dialog(self):
         target_ip = self.selected_peer_ip
@@ -399,6 +493,7 @@ class LANOfficeApp:
         try:
             filename = os.path.basename(path)
             filesize = os.path.getsize(path)
+            self.logger.info(f"Sending file to {ip}: {filename}")
 
             s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             s.settimeout(30)
@@ -429,8 +524,9 @@ class LANOfficeApp:
 
             self.root.after(0, self._log_file,
                             f"Sent '{filename}' ({self._fmt_size(filesize)}) to "
-                            f"{self.peers.get(ip, {}).get('name', ip)}")
+                            f"{self.peers.get(ip, {}).get('name', ip)}", filename=filename)
         except Exception as e:
+            self.logger.exception(f"File send failed to {ip}: {filename}")
             self.root.after(0, self._log_system, f"File send failed: {e}")
 
     @staticmethod
@@ -452,6 +548,7 @@ class LANOfficeApp:
     #  NETWORKING – START
     # ══════════════════════════════════════════
     def _start_networking(self):
+        self.logger.info("Starting networking threads...")
         self.running = True
         threading.Thread(target=self._broadcast_presence, daemon=True).start()
         threading.Thread(target=self._listen_presence,    daemon=True).start()
@@ -467,9 +564,10 @@ class LANOfficeApp:
                               "ip": self.local_ip}).encode()
         while self.running:
             try:
+                self.logger.debug("Broadcasting presence")
                 sock.sendto(payload, (self.broadcast_addr, BROADCAST_PORT))
-            except Exception:
-                pass
+            except Exception as e:
+                self.logger.error(f"Presence broadcast error: {e}", exc_info=True)
             time.sleep(BROADCAST_INTERVAL)
         # Send leave message before closing
         try:
@@ -477,7 +575,7 @@ class LANOfficeApp:
                                         "ip": self.local_ip}).encode()
             sock.sendto(leave_payload, (self.broadcast_addr, BROADCAST_PORT))
         except Exception:
-            pass
+            self.logger.debug("Failed to send leave message")
         sock.close()
 
     def _listen_presence(self):
@@ -505,14 +603,15 @@ class LANOfficeApp:
                     with self.peers_lock:
                         if ip in self.peers:
                             del self.peers[ip]
-                    self.root.after(0, self._on_peer_leave, name)
+                    self.root.after(0, self._on_peer_leave, ip, name)
             except socket.timeout:
                 pass
-            except Exception:
-                pass
+            except Exception as e:
+                self.logger.error(f"Presence listen error: {e}")
         sock.close()
 
     def _on_peer_join(self, ip, name):
+        self.logger.info(f"Peer joined: {name} ({ip})")
         self._log_system(f"{name} joined the network.")
         self._refresh_peers_list()
 
@@ -528,9 +627,10 @@ class LANOfficeApp:
                         stale.append((ip, info["name"]))
                         del self.peers[ip]
             for ip, name in stale:
-                self.root.after(0, self._on_peer_leave, name)
+                self.root.after(0, self._on_peer_leave, ip, name)
 
-    def _on_peer_leave(self, name):
+    def _on_peer_leave(self, ip, name):
+        self.logger.info(f"Peer left: {name} ({ip})")
         self._log_system(f"{name} left the network.")
         self._refresh_peers_list()
 
@@ -545,6 +645,7 @@ class LANOfficeApp:
 
     # ── Chat (TCP listener) ──────────────────
     def _listen_chat(self):
+        self.logger.info("Chat listener started")
         srv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         srv.bind(("", CHAT_PORT))
@@ -557,8 +658,9 @@ class LANOfficeApp:
                                  args=(conn, addr), daemon=True).start()
             except socket.timeout:
                 pass
+            except Exception as e:
+                self.logger.error(f"Chat listen error: {e}")
         srv.close()
-
     def _handle_chat(self, conn, addr):
         try:
             raw_len = conn.recv(4)
@@ -573,15 +675,17 @@ class LANOfficeApp:
                 data += chunk
             msg = json.loads(data.decode())
             if msg.get("type") == "chat":
+                self.logger.debug(f"Chat from {addr}: {msg['text']}")
                 self.root.after(0, self._log_message,
                                 msg["name"], msg["text"], False)
         except Exception:
-            pass
+            self.logger.exception("Chat handling error")
         finally:
             conn.close()
 
     # ── File transfer (TCP listener) ─────────
     def _listen_file(self):
+        self.logger.info("File transfer listener started")
         srv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         srv.bind(("", FILE_PORT))
@@ -594,6 +698,8 @@ class LANOfficeApp:
                                  args=(conn, addr), daemon=True).start()
             except socket.timeout:
                 pass
+            except Exception as e:
+                self.logger.error(f"File listen error: {e}")
         srv.close()
 
     def _handle_file(self, conn, addr):
@@ -613,6 +719,7 @@ class LANOfficeApp:
             filename = meta["filename"]
             filesize = meta["filesize"]
             sender   = meta.get("sender", addr[0])
+            self.logger.info(f"File transfer from {addr}: {filename}")
 
             # Ask user where to save (on main thread)
             save_path_holder = [None]
@@ -659,9 +766,9 @@ class LANOfficeApp:
             self.root.after(0, self._show_progress, False)
 
             self.root.after(0, self._log_file,
-                            f"Received '{filename}' from {sender} → saved to {save_path}")
-        except Exception as e:
-            self.root.after(0, self._log_system, f"File receive error: {e}")
+                            f"Received '{filename}' from {sender} → saved to {save_path}", filename=filename)
+        except Exception:
+            self.logger.exception("File receive error")
         finally:
             conn.close()
 
