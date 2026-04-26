@@ -15,9 +15,9 @@ import struct
 import logging
 import traceback
 
-# ─────────────────────────────────────────────
+# ---------------------------------------------
 #  CONFIGURATION
-# ─────────────────────────────────────────────
+# ---------------------------------------------
 DEFAULT_FONT_FAMILY = "Segoe UI"
 BROADCAST_PORT  = 55000   # UDP – user discovery / presence
 CHAT_PORT       = 55001   # TCP – chat messages
@@ -28,9 +28,9 @@ MAX_HISTORY_LOAD = 100
 BUFFER_SIZE     = 4096
 CONFIG_FILE     = "lan_config.json"
 
-# ─────────────────────────────────────────────
+# ---------------------------------------------
 #  NETWORK HELPERS
-# ─────────────────────────────────────────────
+# ---------------------------------------------
 def get_local_ip():
     """Return the machine's LAN IP address."""
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -53,9 +53,9 @@ def get_broadcast_address(local_ip):
         parts = local_ip.rsplit(".", 1)
         return parts[0] + ".255"
 
-# ─────────────────────────────────────────────
+# ---------------------------------------------
 #  CORE APPLICATION
-# ─────────────────────────────────────────────
+# ---------------------------------------------
 class LANOfficeApp:
     def __init__(self, root):
         self.root = root
@@ -111,9 +111,9 @@ class LANOfficeApp:
         self._load_config()
         self._build_login_screen()
 
-    # ══════════════════════════════════════════
+    # ==========================================
     #  CONFIG & PERSISTENCE
-    # ══════════════════════════════════════════
+    # ==========================================
     def _load_config(self):
         self.config = {"username": "", "download_dir": ""}
         self.username = ""
@@ -171,9 +171,9 @@ class LANOfficeApp:
         except Exception as e:
             self.logger.error(f"Failed to save message: {e}")
 
-    # ══════════════════════════════════════════
+    # ==========================================
     #  LOGIN SCREEN
-    # ══════════════════════════════════════════
+    # ==========================================
     def _build_login_screen(self):
         self.login_frame = tk.Frame(self.root, bg="#1e1e2e")
         self.login_frame.place(relx=0.5, rely=0.5, anchor="center")
@@ -208,9 +208,9 @@ class LANOfficeApp:
                           font=(DEFAULT_FONT_FAMILY, 9), bg="#1e1e2e", fg="#45475a")
         ip_lbl.pack(pady=(16, 0))
 
-    # ══════════════════════════════════════════
+    # ==========================================
     #  MAIN UI
-    # ══════════════════════════════════════════
+    # ==========================================
     def _start_app(self):
         name = self.name_entry.get().strip()
         if not name:
@@ -232,7 +232,7 @@ class LANOfficeApp:
         self._start_networking()
 
     def _build_main_ui(self):
-        # ── Sidebar (peers) ──────────────────
+        # -- Sidebar (peers) ------------------
         sidebar = tk.Frame(self.root, bg="#181825", width=200)
         sidebar.pack(side="left", fill="y")
         sidebar.pack_propagate(False)
@@ -251,7 +251,7 @@ class LANOfficeApp:
                                           bg="#181825", fg="#6c7086", pady=4)
         self.peer_status_label.pack()
 
-        # ── Main area ────────────────────────
+        # -- Main area ------------------------
         main = tk.Frame(self.root, bg="#1e1e2e")
         main.pack(side="right", fill="both", expand=True)
 
@@ -342,9 +342,9 @@ class LANOfficeApp:
 
         self._log_system("Welcome to LAN Office! Discovering peers on your network…")
 
-    # ══════════════════════════════════════════
+    # ==========================================
     #  CHAT HELPERS
-    # ══════════════════════════════════════════
+    # ==========================================
     def _log_message(self, sender_name, text, is_self=False):
         ts = time.strftime("%H:%M")
         self.chat_display.config(state="normal")
@@ -389,9 +389,9 @@ class LANOfficeApp:
             self._save_config()
             self._log_system(f"Downloads will now be saved to: {path}")
 
-    # ══════════════════════════════════════════
+    # ==========================================
     #  PEER SELECTION (DM vs GROUP)
-    # ══════════════════════════════════════════
+    # ==========================================
     def _on_peer_select(self, event):
         sel = self.peers_listbox.curselection()
         if not sel:
@@ -426,9 +426,9 @@ class LANOfficeApp:
             self.chat_display.config(state="disabled")
             self._log_system("Chat history cleared.")
 
-    # ══════════════════════════════════════════
+    # -----------------------------------------
     #  SENDING
-    # ══════════════════════════════════════════
+    # -----------------------------------------
     def _send_message(self):
         text = self.msg_entry.get().strip()
         if not text:
@@ -544,9 +544,9 @@ class LANOfficeApp:
         else:
             self.progress_frame.pack_forget()
 
-    # ══════════════════════════════════════════
+    # ==========================================
     #  NETWORKING – START
-    # ══════════════════════════════════════════
+    # ==========================================
     def _start_networking(self):
         self.logger.info("Starting networking threads...")
         self.running = True
@@ -556,7 +556,7 @@ class LANOfficeApp:
         threading.Thread(target=self._listen_file,        daemon=True).start()
         threading.Thread(target=self._prune_peers,        daemon=True).start()
 
-    # ── Presence (UDP broadcast) ─────────────
+    # -- Presence (UDP broadcast) -------------
     def _broadcast_presence(self):
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
@@ -652,7 +652,7 @@ class LANOfficeApp:
         self.peer_status_label.config(
             text=f"{count} user{'s' if count != 1 else ''} online")
 
-    # ── Chat (TCP listener) ──────────────────
+    # -- Chat (TCP listener) ------------------
     def _listen_chat(self):
         self.logger.info("Chat listener started")
         srv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -692,7 +692,7 @@ class LANOfficeApp:
         finally:
             conn.close()
 
-    # ── File transfer (TCP listener) ─────────
+    # -- File transfer (TCP listener) ---------
     def _listen_file(self):
         self.logger.info("File transfer listener started")
         srv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -786,17 +786,17 @@ class LANOfficeApp:
                 self.root.after(0, self.progress_val.set, pct)
         self.root.after(0, self._show_progress, False)
 
-    # ══════════════════════════════════════════
+    # -----------------------------------------
     #  CLEANUP
-    # ══════════════════════════════════════════
+    # -----------------------------------------
     def on_close(self):
         self.running = False
         self.root.destroy()
 
 
-# ─────────────────────────────────────────────
+# ---------------------------------------------
 #  ENTRY POINT
-# ─────────────────────────────────────────────
+# ---------------------------------------------
 if __name__ == "__main__":
     root = tk.Tk()
     app = LANOfficeApp(root)
