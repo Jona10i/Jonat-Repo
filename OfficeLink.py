@@ -21,7 +21,7 @@ from PyQt6.QtGui import QIcon, QPixmap, QImage, QAction
 from zeroconf import ServiceInfo, Zeroconf, ServiceBrowser
 
 # --- CONFIGURATION ---
-ALLOWED_MGMT_USERS = ["Admin", " Manager"] # Only these names can access management features
+ALLOWED_MGMT_USERS = ["Admin", "Manager"] # Only these names can access management features
 
 # --- CHAT HISTORY ---
 CHAT_HISTORY_FILE = "chat_history.jsonl"

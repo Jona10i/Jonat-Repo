@@ -104,6 +104,7 @@ class LANOfficeApp:
 
         self.running = False
         self.selected_peer_ip = None   # for direct messages
+        self.cancel_transfer = False
 
         self.chat_history = []
         self.chat_history_lock = threading.Lock()
@@ -324,10 +325,12 @@ class LANOfficeApp:
         send_btn.pack(side="left")
 
         file_btn = tk.Button(input_bar, text="📎 File", font=(DEFAULT_FONT_FAMILY, 9),
-                             bg="#313244", fg="#cdd6f4", relief="flat",
-                             activebackground="#45475a", padx=10, cursor="hand2",
-                             command=self._send_file_dialog)
+                              bg="#313244", fg="#cdd6f4", relief="flat",
+                              activebackground="#45475a", padx=10, cursor="hand2",
+                              command=self._send_file_dialog)
         file_btn.pack(side="left", padx=(6, 0))
+        self.file_btn = file_btn
+        self._update_file_button_state()
 
         # Progress bar (hidden by default)
         self.progress_frame = tk.Frame(main, bg="#181825", height=4)
@@ -404,15 +407,17 @@ class LANOfficeApp:
         # find IP for this label
         with self.peers_lock:
             for ip, info in self.peers.items():
-                display = f"🟢 {info['name']}"
-                if display == label:
-                    self.selected_peer_ip = ip
-                    self.chat_title.config(text=f"💬  DM → {info['name']}")
-                    self.dm_clear_btn.pack(side="right", pady=6, padx=10)
-                    return
+                 display = f"🟢 {info['name']}"
+                 if display == label:
+                     self.selected_peer_ip = ip
+                     self._update_file_button_state()
+                     self.chat_title.config(text=f"💬  DM → {info['name']}")
+                     self.dm_clear_btn.pack(side="right", pady=6, padx=10)
+                     return
 
     def _clear_dm_selection(self):
         self.selected_peer_ip = None
+        self._update_file_button_state()
         self.peers_listbox.selection_clear(0, "end")
         self.chat_title.config(text="💬  Group Chat")
         self.dm_clear_btn.pack_forget()
