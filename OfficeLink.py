@@ -6,6 +6,7 @@ import base64
 import io
 import html
 import winsound
+import threading
 from datetime import datetime
 from PIL import Image
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QHBoxLayout, 
@@ -21,6 +22,10 @@ from zeroconf import ServiceInfo, Zeroconf, ServiceBrowser
 
 # --- CONFIGURATION ---
 ALLOWED_MGMT_USERS = ["Admin", " Manager"] # Only these names can access management features
+
+# --- CHAT HISTORY ---
+CHAT_HISTORY_FILE = "chat_history.jsonl"
+MAX_HISTORY_LOAD = 100  # max messages to load on startup
 
 # --- STYLING (QSS) ---
 STYLESHEET = """
@@ -558,6 +563,7 @@ class OfficeLink(QMainWindow):
         self.pending_files = {}
         self.memory_files = {} # {filename: bytes}
         self.chat_history = [] # List of dicts: {"sender": ..., "msg": ..., "time": ...}
+        self.chat_history_lock = threading.Lock()
 
         self.notif_manager = NotificationManager()
         self.floating_icon = FloatingIcon(self)
