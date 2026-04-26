@@ -1,0 +1,61 @@
+name: Build and Release OfficeLink
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pyinstaller PyQt6 zeroconf pillow
+      - name: Build EXE
+        run: pyinstaller --noconfirm OfficeLink.spec
+      - name: Upload EXE
+        uses: actions/upload-artifact@v3
+        with:
+          name: OfficeLink-Windows
+          path: dist/OfficeLink.exe
+
+  build-macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pyinstaller PyQt6 zeroconf pillow
+      - name: Build App
+        run: pyinstaller --noconfirm OfficeLink_Mac.spec
+      - name: Create DMG
+        run: |
+          brew install create-dmg
+          mkdir -p dist/dmg
+          create-dmg \
+            --volname "OfficeLink Installer" \
+            --window-pos 200 120 \
+            --window-size 600 400 \
+            --icon-size 100 \
+            --icon "OfficeLink.app" 175 120 \
+            --hide-extension "OfficeLink.app" \
+            --app-drop-link 425 120 \
+            "dist/OfficeLink.dmg" \
+            "dist/"
+      - name: Upload DMG
+        uses: actions/upload-artifact@v3
+        with:
+          name: OfficeLink-MacOS
+          path: dist/OfficeLink.dmg
