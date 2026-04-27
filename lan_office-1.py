@@ -1,4 +1,4 @@
-"""
+﻿"""
 LAN Office - Local Network Communication & File Transfer Tool
 Run this on each PC in your office network.
 Requirements: Python 3.8+  (all libraries are built-in except nothing extra needed)
@@ -20,9 +20,9 @@ import hashlib
 #  CONFIGURATION
 # ---------------------------------------------
 DEFAULT_FONT_FAMILY = "Segoe UI"
-BROADCAST_PORT  = 55000   # UDP – user discovery / presence
-CHAT_PORT       = 55001   # TCP – chat messages
-FILE_PORT       = 55002   # TCP – file transfers
+BROADCAST_PORT  = 55000   # UDP â€“ user discovery / presence
+CHAT_PORT       = 55001   # TCP â€“ chat messages
+FILE_PORT       = 55002   # TCP â€“ file transfers
 BROADCAST_INTERVAL = 5    # seconds between presence broadcasts
 CHAT_HISTORY_FILE = "chat_history.jsonl"
 MAX_HISTORY_LOAD = 100
@@ -197,7 +197,7 @@ class LANOfficeApp:
             self.name_entry.selection_range(0, "end")
         self.name_entry.bind("<Return>", lambda e: self._start_app())
 
-        join_btn = tk.Button(self.login_frame, text="Join Network →",
+        join_btn = tk.Button(self.login_frame, text="Join Network â†’",
                              font=(DEFAULT_FONT_FAMILY, 12, "bold"),
                              bg="#89b4fa", fg="#1e1e2e", relief="flat",
                              activebackground="#74c7ec", activeforeground="#1e1e2e",
@@ -228,7 +228,7 @@ class LANOfficeApp:
             if msg.get("is_system"):
                 self._log_system(msg["text"])
             elif msg.get("filename"):
-                self._log_file(f"Received '{msg['filename']}' from {msg['sender']} → saved to [previous location]", filename=msg["filename"])
+                self._log_file(f"Received '{msg['filename']}' from {msg['sender']} â†’ saved to [previous location]", filename=msg["filename"])
             else:
                 self._log_message(msg["sender"], msg["text"], is_self=msg.get("is_self", False))
         self._start_networking()
@@ -262,36 +262,36 @@ class LANOfficeApp:
         header.pack(fill="x")
         header.pack_propagate(False)
 
-        self.chat_title = tk.Label(header, text="💬  Group Chat",
+        self.chat_title = tk.Label(header, text="ðŸ’¬  Group Chat",
                                    font=(DEFAULT_FONT_FAMILY, 12, "bold"),
                                    bg="#181825", fg="#cdd6f4", padx=16)
         self.chat_title.pack(side="left", pady=10)
 
-        settings_btn = tk.Button(header, text="👤 Profile", font=(DEFAULT_FONT_FAMILY, 9),
+        settings_btn = tk.Button(header, text="ðŸ‘¤ Profile", font=(DEFAULT_FONT_FAMILY, 9),
                                  bg="#313244", fg="#cdd6f4", relief="flat",
                                  activebackground="#45475a", padx=10, cursor="hand2",
                                  command=self._open_settings)
         settings_btn.pack(side="right", pady=10, padx=10)
 
-        clear_btn = tk.Button(header, text="🗑️ Clear", font=(DEFAULT_FONT_FAMILY, 9),
+        clear_btn = tk.Button(header, text="ðŸ—‘ï¸ Clear", font=(DEFAULT_FONT_FAMILY, 9),
                               bg="#313244", fg="#cdd6f4", relief="flat",
                               activebackground="#45475a", padx=10, cursor="hand2",
                               command=self._clear_chat_history)
         clear_btn.pack(side="right", pady=10, padx=(0, 6))
 
-        export_btn = tk.Button(header, text="📤 Export", font=(DEFAULT_FONT_FAMILY, 9),
+        export_btn = tk.Button(header, text="ðŸ“¤ Export", font=(DEFAULT_FONT_FAMILY, 9),
                           bg="#313244", fg="#cdd6f4", relief="flat",
                           activebackground="#45475a", padx=10, cursor="hand2",
                           command=self._export_chat_history)
         export_btn.pack(side="right", pady=10, padx=(0, 6))
 
-        dl_btn = tk.Button(header, text="📂 Folder", font=(DEFAULT_FONT_FAMILY, 9),
+        dl_btn = tk.Button(header, text="ðŸ“‚ Folder", font=(DEFAULT_FONT_FAMILY, 9),
                             bg="#313244", fg="#cdd6f4", relief="flat",
                             activebackground="#45475a", padx=10, cursor="hand2",
                             command=self._open_download_settings)
         dl_btn.pack(side="right", pady=10)
 
-        self.dm_clear_btn = tk.Button(header, text="← Back to Group",
+        self.dm_clear_btn = tk.Button(header, text="â† Back to Group",
                                       font=(DEFAULT_FONT_FAMILY, 9), bg="#313244", fg="#89b4fa",
                                       relief="flat", padx=10, cursor="hand2",
                                       command=self._clear_dm_selection)
@@ -331,7 +331,7 @@ class LANOfficeApp:
                              command=self._send_message)
         send_btn.pack(side="left")
 
-        file_btn = tk.Button(input_bar, text="📎 File", font=(DEFAULT_FONT_FAMILY, 9),
+        file_btn = tk.Button(input_bar, text="ðŸ“Ž File", font=(DEFAULT_FONT_FAMILY, 9),
                               bg="#313244", fg="#cdd6f4", relief="flat",
                               activebackground="#45475a", padx=10, cursor="hand2",
                               command=self._send_file_dialog)
@@ -344,7 +344,7 @@ class LANOfficeApp:
         self.progress_frame.pack(fill="x", side="bottom")
         
         # Cancel button
-        self.cancel_btn = tk.Button(self.progress_frame, text="✕ Cancel", font=("Segoe UI", 9),
+        self.cancel_btn = tk.Button(self.progress_frame, text="âœ• Cancel", font=("Segoe UI", 9),
                                     bg="#f38ba8", fg="#1e1e2e", relief="flat", padx=8, cursor="hand2",
                                     command=self._cancel_file_transfer)
         
@@ -360,7 +360,7 @@ class LANOfficeApp:
         self.progress_bar.pack(fill="x", side="left", expand=True)
         self.progress_frame.pack_forget() # hide initially
 
-        self._log_system("Welcome to LAN Office! Discovering peers on your network…")
+        self._log_system("Welcome to LAN Office! Discovering peers on your networkâ€¦")
 
     # ==========================================
     #  CHAT HELPERS
@@ -380,14 +380,14 @@ class LANOfficeApp:
     def _log_system(self, text):
         self.chat_display.config(state="normal")
         ts = time.strftime("%H:%M")
-        self.chat_display.insert("end", f"[{ts}] ● {text}\n", "msg_system")
+        self.chat_display.insert("end", f"[{ts}] â— {text}\n", "msg_system")
         self.chat_display.config(state="disabled")
         self.chat_display.see("end")
         self._save_message("SYSTEM", text, is_system=True)
 
     def _log_file(self, text, filename=None):
         self.chat_display.config(state="normal")
-        self.chat_display.insert("end", f"  📁 {text}\n", "file_recv")
+        self.chat_display.insert("end", f"  ðŸ“ {text}\n", "file_recv")
         self.chat_display.config(state="disabled")
         self.chat_display.see("end")
         self._save_message("FILE", text, filename=filename)
@@ -420,20 +420,25 @@ class LANOfficeApp:
         # find IP for this label
         with self.peers_lock:
             for ip, info in self.peers.items():
-                 display = f"🟢 {info['name']}"
+                 display = f"ðŸŸ¢ {info['name']}"
                  if display == label:
                      self.selected_peer_ip = ip
                      self._update_file_button_state()
-                     self.chat_title.config(text=f"💬  DM → {info['name']}")
+                     self.chat_title.config(text=f"ðŸ’¬  DM â†’ {info['name']}")
                      self.dm_clear_btn.pack(side="right", pady=6, padx=10)
                      return
-
     def _clear_dm_selection(self):
         self.selected_peer_ip = None
         self._update_file_button_state()
         self.peers_listbox.selection_clear(0, "end")
-        self.chat_title.config(text="💬  Group Chat")
+        self.chat_title.config(text="ðŸ’¬  Group Chat")
         self.dm_clear_btn.pack_forget()
+
+    def _update_file_button_state(self):
+        """Enable the file button only when a recipient is selected."""
+        if hasattr(self, 'file_btn'):
+            state = "normal" if self.selected_peer_ip else "disabled"
+            self.file_btn.config(state=state)
 
     def _clear_chat_history(self):
         if messagebox.askyesno("Clear Chat", "Delete all chat history?"):
@@ -447,10 +452,6 @@ class LANOfficeApp:
             self.chat_display.delete(1.0, "end")
             self.chat_display.config(state="disabled")
             self._log_system("Chat history cleared.")
-
-    def _export_chat_history(self):
-        if not self.chat_history:
-            messagebox.showinfo("No History", "There is no chat history to export.")
             return
             
         export_window = tk.Toplevel(self.root)
@@ -529,9 +530,9 @@ class LANOfficeApp:
                     filename_attr = msg.get("filename")
                     
                     if is_system:
-                        f.write(f"[{timestamp}] ● {text}\n")
+                        f.write(f"[{timestamp}] â— {text}\n")
                     elif filename_attr:
-                        f.write(f"[{timestamp}] 📁 {text}\n")
+                        f.write(f"[{timestamp}] ðŸ“ {text}\n")
                     else:
                         f.write(f"[{timestamp}] {sender}: {text}\n")
                         
@@ -628,7 +629,7 @@ class LANOfficeApp:
         }).encode()
 
         if self.selected_peer_ip:
-            # DM – send only to selected peer
+            # DM â€“ send only to selected peer
             threading.Thread(target=self._tcp_send,
                              args=(self.selected_peer_ip, CHAT_PORT, payload),
                              daemon=True).start()
@@ -656,7 +657,7 @@ class LANOfficeApp:
         target_ip = self.selected_peer_ip
         if not self.selected_peer_ip:
             messagebox.showinfo("Select a recipient",
-                                "Click a user in the sidebar first, then click 📎 File to send a file.")
+                                "Click a user in the sidebar first, then click ðŸ“Ž File to send a file.")
             return
 
         path = filedialog.askopenfilename(title="Select a file to send")
@@ -753,7 +754,7 @@ class LANOfficeApp:
         self._log_system("File transfer cancelled.")
 
     # ==========================================
-    #  NETWORKING – START
+    #  NETWORKING â€“ START
     # ==========================================
     def _start_networking(self):
         self.logger.info("Starting networking threads...")
@@ -855,7 +856,7 @@ class LANOfficeApp:
         self.peers_listbox.delete(0, "end")
         with self.peers_lock:
             for ip, info in self.peers.items():
-                self.peers_listbox.insert("end", f"🟢 {info['name']}")
+                self.peers_listbox.insert("end", f"ðŸŸ¢ {info['name']}")
         count = self.peers_listbox.size()
         self.peer_status_label.config(
             text=f"{count} user{'s' if count != 1 else ''} online")
@@ -943,13 +944,13 @@ class LANOfficeApp:
             if checksum:
                 received_checksum = self._compute_checksum(save_path)
                 if received_checksum == checksum:
-                    self.root.after(0, self._log_system, f"✓ File integrity verified: {filename}")
+                    self.root.after(0, self._log_system, f"âœ“ File integrity verified: {filename}")
                     self.logger.info(f"File checksum verified: {filename}")
                 else:
-                    self.root.after(0, self._log_system, f"✗ File checksum mismatch! Expected {checksum}, got {received_checksum}")
+                    self.root.after(0, self._log_system, f"âœ— File checksum mismatch! Expected {checksum}, got {received_checksum}")
                     self.logger.error(f"Checksum mismatch for {filename}")
             self.root.after(0, self._log_file,
-                            f"Received '{filename}' from {sender} → saved to {save_path}", filename=filename)
+                            f"Received '{filename}' from {sender} â†’ saved to {save_path}", filename=filename)
         except Exception:
             self.logger.exception("File receive error")
         finally:
@@ -1024,3 +1025,4 @@ if __name__ == "__main__":
     app = LANOfficeApp(root)
     root.protocol("WM_DELETE_WINDOW", app.on_close)
     root.mainloop()
+
