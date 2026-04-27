@@ -1,71 +1,50 @@
-﻿"""
-LAN Office - Local Network Communication & File Transfer Tool
-Run this on each PC in your office network.
-Requirements: Python 3.8+  (all libraries are built-in except nothing extra needed)
-"""
-
+import tkinter as tk
+from tkinter import messagebox, scrolledtext, filedialog, ttk
 import socket
 import threading
-import tkinter as tk
-from tkinter import ttk, scrolledtext, filedialog, messagebox, simpledialog
 import json
 import os
 import time
 import struct
+import hashlib
 import logging
 import traceback
-import hashlib
 
 # ---------------------------------------------
 #  CONFIGURATION
 # ---------------------------------------------
 DEFAULT_FONT_FAMILY = "Segoe UI"
-BROADCAST_PORT  = 55000   # UDP â€“ user discovery / presence
-CHAT_PORT       = 55001   # TCP â€“ chat messages
-FILE_PORT       = 55002   # TCP â€“ file transfers
+BROADCAST_PORT  = 55000   # UDP – user discovery / presence
+CHAT_PORT       = 55001   # TCP – chat messages
+FILE_PORT       = 55002   # TCP – file transfers
 BROADCAST_INTERVAL = 5    # seconds between presence broadcasts
 CHAT_HISTORY_FILE = "chat_history.jsonl"
 MAX_HISTORY_LOAD = 100
 BUFFER_SIZE     = 4096
 CONFIG_FILE     = "lan_config.json"
 
-# ---------------------------------------------
-#  NETWORK HELPERS
-# ---------------------------------------------
 def get_local_ip():
-    """Return the machine's LAN IP address."""
-    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         s.connect(("8.8.8.8", 80))
-        return s.getsockname()[0]
+        ip = s.getsockname()[0]
+        s.close()
+        return ip
     except Exception:
         return "127.0.0.1"
-    finally:
-        s.close()
 
 def get_broadcast_address(local_ip):
-    """Return the subnet broadcast address (tries to be smart)."""
-    try:
-        import ipaddress
-        # Assumes /24 by default, but attempts to be robust
-        net = ipaddress.IPv4Network(f"{local_ip}/255.255.255.0", strict=False)
-        return str(net.broadcast_address)
-    except Exception:
-        parts = local_ip.rsplit(".", 1)
-        return parts[0] + ".255"
+    parts = local_ip.split('.')
+    parts[-1] = '255'
+    return '.'.join(parts)
 
-# ---------------------------------------------
-#  CORE APPLICATION
-# ---------------------------------------------
 class LANOfficeApp:
     def __init__(self, root):
         self.root = root
         self.root.title("LAN Office")
-        self.root.geometry("900x620")
-        self.root.minsize(750, 500)
+        self.root.geometry("900x600")
         self.root.configure(bg="#1e1e2e")
 
-        self.username = ""
         self.local_ip = get_local_ip()
         self.broadcast_addr = get_broadcast_address(self.local_ip)
 
@@ -102,10 +81,8 @@ class LANOfficeApp:
         # {ip: {"name": str, "last_seen": float}}
         self.peers = {}
         self.peers_lock = threading.Lock()
-
         self.running = False
         self.selected_peer_ip = None   # for direct messages
-        self.cancel_transfer = False
 
         self.chat_history = []
         self.chat_history_lock = threading.Lock()
@@ -195,9 +172,10 @@ class LANOfficeApp:
         if self.username:
             self.name_entry.insert(0, self.username)
             self.name_entry.selection_range(0, "end")
+
         self.name_entry.bind("<Return>", lambda e: self._start_app())
 
-        join_btn = tk.Button(self.login_frame, text="Join Network â†’",
+        join_btn = tk.Button(self.login_frame, text="Join Network →",
                              font=(DEFAULT_FONT_FAMILY, 12, "bold"),
                              bg="#89b4fa", fg="#1e1e2e", relief="flat",
                              activebackground="#74c7ec", activeforeground="#1e1e2e",
@@ -228,7 +206,7 @@ class LANOfficeApp:
             if msg.get("is_system"):
                 self._log_system(msg["text"])
             elif msg.get("filename"):
-                self._log_file(f"Received '{msg['filename']}' from {msg['sender']} â†’ saved to [previous location]", filename=msg["filename"])
+                self._log_file(f"Received '{msg['filename']}' from {msg['sender']} → saved to [previous location]", filename=msg["filename"])
             else:
                 self._log_message(msg["sender"], msg["text"], is_self=msg.get("is_self", False))
         self._start_networking()
@@ -262,36 +240,36 @@ class LANOfficeApp:
         header.pack(fill="x")
         header.pack_propagate(False)
 
-        self.chat_title = tk.Label(header, text="ðŸ’¬  Group Chat",
+        self.chat_title = tk.Label(header, text="💬  Group Chat",
                                    font=(DEFAULT_FONT_FAMILY, 12, "bold"),
                                    bg="#181825", fg="#cdd6f4", padx=16)
         self.chat_title.pack(side="left", pady=10)
 
-        settings_btn = tk.Button(header, text="ðŸ‘¤ Profile", font=(DEFAULT_FONT_FAMILY, 9),
+        settings_btn = tk.Button(header, text="👤 Profile", font=(DEFAULT_FONT_FAMILY, 9),
                                  bg="#313244", fg="#cdd6f4", relief="flat",
                                  activebackground="#45475a", padx=10, cursor="hand2",
                                  command=self._open_settings)
         settings_btn.pack(side="right", pady=10, padx=10)
 
-        clear_btn = tk.Button(header, text="ðŸ—‘ï¸ Clear", font=(DEFAULT_FONT_FAMILY, 9),
+        clear_btn = tk.Button(header, text="🗑️ Clear", font=(DEFAULT_FONT_FAMILY, 9),
                               bg="#313244", fg="#cdd6f4", relief="flat",
                               activebackground="#45475a", padx=10, cursor="hand2",
                               command=self._clear_chat_history)
         clear_btn.pack(side="right", pady=10, padx=(0, 6))
 
-        export_btn = tk.Button(header, text="ðŸ“¤ Export", font=(DEFAULT_FONT_FAMILY, 9),
+        export_btn = tk.Button(header, text="📤 Export", font=(DEFAULT_FONT_FAMILY, 9),
                           bg="#313244", fg="#cdd6f4", relief="flat",
                           activebackground="#45475a", padx=10, cursor="hand2",
                           command=self._export_chat_history)
         export_btn.pack(side="right", pady=10, padx=(0, 6))
 
-        dl_btn = tk.Button(header, text="ðŸ“‚ Folder", font=(DEFAULT_FONT_FAMILY, 9),
+        dl_btn = tk.Button(header, text="📂 Folder", font=(DEFAULT_FONT_FAMILY, 9),
                             bg="#313244", fg="#cdd6f4", relief="flat",
                             activebackground="#45475a", padx=10, cursor="hand2",
                             command=self._open_download_settings)
         dl_btn.pack(side="right", pady=10)
 
-        self.dm_clear_btn = tk.Button(header, text="â† Back to Group",
+        self.dm_clear_btn = tk.Button(header, text="← Back to Group",
                                       font=(DEFAULT_FONT_FAMILY, 9), bg="#313244", fg="#89b4fa",
                                       relief="flat", padx=10, cursor="hand2",
                                       command=self._clear_dm_selection)
@@ -331,7 +309,7 @@ class LANOfficeApp:
                              command=self._send_message)
         send_btn.pack(side="left")
 
-        file_btn = tk.Button(input_bar, text="ðŸ“Ž File", font=(DEFAULT_FONT_FAMILY, 9),
+        file_btn = tk.Button(input_bar, text="📎 File", font=(DEFAULT_FONT_FAMILY, 9),
                               bg="#313244", fg="#cdd6f4", relief="flat",
                               activebackground="#45475a", padx=10, cursor="hand2",
                               command=self._send_file_dialog)
@@ -344,7 +322,7 @@ class LANOfficeApp:
         self.progress_frame.pack(fill="x", side="bottom")
         
         # Cancel button
-        self.cancel_btn = tk.Button(self.progress_frame, text="âœ• Cancel", font=("Segoe UI", 9),
+        self.cancel_btn = tk.Button(self.progress_frame, text="✕ Cancel", font=("Segoe UI", 9),
                                     bg="#f38ba8", fg="#1e1e2e", relief="flat", padx=8, cursor="hand2",
                                     command=self._cancel_file_transfer)
         
@@ -360,7 +338,7 @@ class LANOfficeApp:
         self.progress_bar.pack(fill="x", side="left", expand=True)
         self.progress_frame.pack_forget() # hide initially
 
-        self._log_system("Welcome to LAN Office! Discovering peers on your networkâ€¦")
+        self._log_system("Welcome to LAN Office! Discovering peers on your network…")
 
     # ==========================================
     #  CHAT HELPERS
@@ -380,14 +358,14 @@ class LANOfficeApp:
     def _log_system(self, text):
         self.chat_display.config(state="normal")
         ts = time.strftime("%H:%M")
-        self.chat_display.insert("end", f"[{ts}] â— {text}\n", "msg_system")
+        self.chat_display.insert("end", f"[{ts}] ● {text}\n", "msg_system")
         self.chat_display.config(state="disabled")
         self.chat_display.see("end")
         self._save_message("SYSTEM", text, is_system=True)
 
     def _log_file(self, text, filename=None):
         self.chat_display.config(state="normal")
-        self.chat_display.insert("end", f"  ðŸ“ {text}\n", "file_recv")
+        self.chat_display.insert("end", f"  📁 {text}\n", "file_recv")
         self.chat_display.config(state="disabled")
         self.chat_display.see("end")
         self._save_message("FILE", text, filename=filename)
@@ -420,18 +398,19 @@ class LANOfficeApp:
         # find IP for this label
         with self.peers_lock:
             for ip, info in self.peers.items():
-                 display = f"ðŸŸ¢ {info['name']}"
+                 display = f"🟢 {info['name']}"
                  if display == label:
                      self.selected_peer_ip = ip
                      self._update_file_button_state()
-                     self.chat_title.config(text=f"ðŸ’¬  DM â†’ {info['name']}")
+                     self.chat_title.config(text=f"💬  DM → {info['name']}")
                      self.dm_clear_btn.pack(side="right", pady=6, padx=10)
                      return
+
     def _clear_dm_selection(self):
         self.selected_peer_ip = None
         self._update_file_button_state()
         self.peers_listbox.selection_clear(0, "end")
-        self.chat_title.config(text="ðŸ’¬  Group Chat")
+        self.chat_title.config(text="💬  Group Chat")
         self.dm_clear_btn.pack_forget()
 
     def _update_file_button_state(self):
@@ -452,6 +431,10 @@ class LANOfficeApp:
             self.chat_display.delete(1.0, "end")
             self.chat_display.config(state="disabled")
             self._log_system("Chat history cleared.")
+
+    def _export_chat_history(self):
+        if not self.chat_history:
+            messagebox.showinfo("No History", "There is no chat history to export.")
             return
             
         export_window = tk.Toplevel(self.root)
@@ -507,7 +490,6 @@ class LANOfficeApp:
 
     def _export_as_text(self):
         if not self.chat_history:
-            messagebox.showinfo("No History", "There is no chat history to export.")
             return
             
         filename = filedialog.asksaveasfilename(
@@ -530,9 +512,9 @@ class LANOfficeApp:
                     filename_attr = msg.get("filename")
                     
                     if is_system:
-                        f.write(f"[{timestamp}] â— {text}\n")
+                        f.write(f"[{timestamp}] ● {text}\n")
                     elif filename_attr:
-                        f.write(f"[{timestamp}] ðŸ“ {text}\n")
+                        f.write(f"[{timestamp}] 📁 {text}\n")
                     else:
                         f.write(f"[{timestamp}] {sender}: {text}\n")
                         
@@ -540,11 +522,9 @@ class LANOfficeApp:
             self._log_system(f"Exported chat history to {os.path.basename(filename)}")
         except Exception as e:
             messagebox.showerror("Export Error", f"Failed to export chat history:\n{str(e)}")
-            self.logger.error(f"Failed to export chat history: {e}")
 
     def _export_as_json(self):
         if not self.chat_history:
-            messagebox.showinfo("No History", "There is no chat history to export.")
             return
             
         filename = filedialog.asksaveasfilename(
@@ -556,7 +536,6 @@ class LANOfficeApp:
             return
             
         try:
-            # Prepare data for JSON export
             export_data = {
                 "export_info": {
                     "app": "LAN Office",
@@ -573,11 +552,9 @@ class LANOfficeApp:
             self._log_system(f"Exported chat history to {os.path.basename(filename)}")
         except Exception as e:
             messagebox.showerror("Export Error", f"Failed to export chat history:\n{str(e)}")
-            self.logger.error(f"Failed to export chat history: {e}")
 
     def _export_as_csv(self):
         if not self.chat_history:
-            messagebox.showinfo("No History", "There is no chat history to export.")
             return
             
         filename = filedialog.asksaveasfilename(
@@ -592,10 +569,7 @@ class LANOfficeApp:
             import csv
             with open(filename, "w", newline="", encoding="utf-8") as f:
                 writer = csv.writer(f)
-                # Write header
                 writer.writerow(["Timestamp", "Sender", "Message", "Is System", "Filename"])
-                
-                # Write data
                 for msg in self.chat_history:
                     writer.writerow([
                         msg.get("time_str", ""),
@@ -604,12 +578,10 @@ class LANOfficeApp:
                         "Yes" if msg.get("is_system", False) else "No",
                         msg.get("filename", "")
                     ])
-                    
             messagebox.showinfo("Export Successful", f"Chat history exported to:\n{filename}")
             self._log_system(f"Exported chat history to {os.path.basename(filename)}")
         except Exception as e:
             messagebox.showerror("Export Error", f"Failed to export chat history:\n{str(e)}")
-            self.logger.error(f"Failed to export chat history: {e}")
 
     # -----------------------------------------
     #  SENDING
@@ -629,12 +601,10 @@ class LANOfficeApp:
         }).encode()
 
         if self.selected_peer_ip:
-            # DM â€“ send only to selected peer
             threading.Thread(target=self._tcp_send,
                              args=(self.selected_peer_ip, CHAT_PORT, payload),
                              daemon=True).start()
         else:
-            # Broadcast to all peers
             with self.peers_lock:
                 targets = list(self.peers.keys())
             for ip in targets:
@@ -647,17 +617,15 @@ class LANOfficeApp:
             s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             s.settimeout(5)
             s.connect((ip, port))
-            # Prefix length so receiver knows where message ends
             s.sendall(struct.pack("!I", len(data)) + data)
             s.close()
-        except Exception as e:
-            self.logger.debug(f"TCP connection error to {ip}:{port}: {e}")
+        except Exception:
+            pass
 
     def _send_file_dialog(self):
         target_ip = self.selected_peer_ip
         if not self.selected_peer_ip:
-            messagebox.showinfo("Select a recipient",
-                                "Click a user in the sidebar first, then click ðŸ“Ž File to send a file.")
+            messagebox.showinfo("Select a recipient", "Click a user in the sidebar first.")
             return
 
         path = filedialog.askopenfilename(title="Select a file to send")
@@ -665,24 +633,19 @@ class LANOfficeApp:
             return
 
         self.cancel_transfer = False
-        threading.Thread(target=self._send_file,
-                         args=(target_ip, path),
-                         daemon=True).start()
+        threading.Thread(target=self._send_file, args=(target_ip, path), daemon=True).start()
 
     def _send_file(self, ip, path):
         try:
-            # Reset cancel flag for new transfer
             self.cancel_transfer = False
             filename = os.path.basename(path)
             filesize = os.path.getsize(path)
             checksum = self._compute_checksum(path)
-            self.logger.info(f"Sending file to {ip}: {filename}")
 
             s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             s.settimeout(30)
             s.connect((ip, FILE_PORT))
 
-            # Header: JSON metadata
             meta = json.dumps({
                 "filename": filename,
                 "filesize": filesize,
@@ -691,56 +654,44 @@ class LANOfficeApp:
             }).encode()
             s.sendall(struct.pack("!I", len(meta)) + meta)
 
-            # File data
             self.root.after(0, self._show_progress, True)
             sent = 0
             with open(path, "rb") as f:
                 while True:
-                    if self.cancel_transfer:
-                        break
+                    if self.cancel_transfer: break
                     chunk = f.read(BUFFER_SIZE)
-                    if not chunk:
-                        break
+                    if not chunk: break
                     s.sendall(chunk)
                     sent += len(chunk)
                     pct = (sent / filesize) * 100
                     self.root.after(0, self.progress_val.set, pct)
             s.close()
             self.root.after(0, self._show_progress, False)
-            self.logger.info(f"File sent with checksum: {checksum}")
-
-            self.root.after(0, self._log_file,
-                                 f"Sent '{filename}' ({self._fmt_size(filesize)}) to "
-                                 f"{self.peers.get(ip, {}).get('name', ip)}", filename=filename)
+            self.root.after(0, self._log_file, f"Sent '{filename}' to {self.peers.get(ip, {}).get('name', ip)}")
         except Exception as e:
-            self.logger.exception(f"File send failed to {ip}: {filename}")
             self.root.after(0, self._log_system, f"File send failed: {e}")
 
     @staticmethod
     def _fmt_size(n):
          for unit in ("B", "KB", "MB", "GB"):
-             if n < 1024:
-                 return f"{n:.1f} {unit}"
+             if n < 1024: return f"{n:.1f} {unit}"
              n /= 1024
          return f"{n:.1f} TB"
 
-     @staticmethod
-     def _compute_checksum(filepath):
-         """Compute SHA256 checksum of a file."""
-         sha256 = hashlib.sha256()
-         with open(filepath, "rb") as f:
-             while True:
-                 chunk = f.read(BUFFER_SIZE)
-                 if not chunk:
-                     break
-                 sha256.update(chunk)
-         return sha256.hexdigest()
+    @staticmethod
+    def _compute_checksum(filepath):
+        sha256 = hashlib.sha256()
+        with open(filepath, "rb") as f:
+            while True:
+                chunk = f.read(BUFFER_SIZE)
+                if not chunk: break
+                sha256.update(chunk)
+        return sha256.hexdigest()
 
-     def _show_progress(self, show=True):
+    def _show_progress(self, show=True):
         if show:
             self.progress_frame.pack(fill="x", side="bottom")
             self.progress_val.set(0)
-            # Show cancel button first (right side), then progress bar (left side)
             self.cancel_btn.pack(side="right", padx=8)
             self.progress_bar.pack(fill="x", side="left", expand=True)
         else:
@@ -748,16 +699,14 @@ class LANOfficeApp:
             self.progress_frame.pack_forget()
 
     def _cancel_file_transfer(self):
-        """Cancel an ongoing file transfer."""
         self.cancel_transfer = True
         self._show_progress(False)
         self._log_system("File transfer cancelled.")
 
     # ==========================================
-    #  NETWORKING â€“ START
+    #  NETWORKING – START
     # ==========================================
     def _start_networking(self):
-        self.logger.info("Starting networking threads...")
         self.running = True
         threading.Thread(target=self._broadcast_presence, daemon=True).start()
         threading.Thread(target=self._listen_presence,    daemon=True).start()
@@ -765,26 +714,15 @@ class LANOfficeApp:
         threading.Thread(target=self._listen_file,        daemon=True).start()
         threading.Thread(target=self._prune_peers,        daemon=True).start()
 
-    # -- Presence (UDP broadcast) -------------
     def _broadcast_presence(self):
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
-        payload = json.dumps({"type": "presence", "name": self.username,
-                              "ip": self.local_ip}).encode()
+        payload = json.dumps({"type": "presence", "name": self.username, "ip": self.local_ip}).encode()
         while self.running:
             try:
-                self.logger.debug("Broadcasting presence")
                 sock.sendto(payload, (self.broadcast_addr, BROADCAST_PORT))
-            except Exception as e:
-                self.logger.error(f"Presence broadcast error: {e}", exc_info=True)
+            except Exception: pass
             time.sleep(BROADCAST_INTERVAL)
-        # Send leave message before closing
-        try:
-            leave_payload = json.dumps({"type": "leave", "name": self.username,
-                                        "ip": self.local_ip}).encode()
-            sock.sendto(leave_payload, (self.broadcast_addr, BROADCAST_PORT))
-        except Exception:
-            self.logger.debug("Failed to send leave message")
         sock.close()
 
     def _listen_presence(self):
@@ -795,23 +733,14 @@ class LANOfficeApp:
         while self.running:
             try:
                 data, addr = sock.recvfrom(1024)
-                self._handle_presence_data(data, addr)
-            except socket.timeout:
-                pass
-            except Exception as e:
-                self.logger.error(f"Presence listen error: {e}")
+                msg = json.loads(data.decode())
+                if msg.get("type") == "presence" and addr[0] != self.local_ip:
+                    self._update_peer_presence(addr[0], msg.get("name", addr[0]))
+                elif msg.get("type") == "leave":
+                    self._remove_peer(addr[0], msg.get("name", addr[0]))
+            except socket.timeout: pass
+            except Exception: pass
         sock.close()
-
-    def _handle_presence_data(self, data, addr):
-        try:
-            msg = json.loads(data.decode())
-            mtype = msg.get("type")
-            if mtype == "presence" and addr[0] != self.local_ip:
-                self._update_peer_presence(addr[0], msg.get("name", addr[0]))
-            elif mtype == "leave":
-                self._remove_peer(addr[0], msg.get("name", addr[0]))
-        except Exception:
-            pass
 
     def _update_peer_presence(self, ip, name):
         with self.peers_lock:
@@ -824,23 +753,20 @@ class LANOfficeApp:
 
     def _remove_peer(self, ip, name):
         with self.peers_lock:
-            if ip in self.peers:
-                del self.peers[ip]
+            if ip in self.peers: del self.peers[ip]
         self.root.after(0, self._on_peer_leave, ip, name)
 
     def _on_peer_join(self, ip, name):
-        self.logger.info(f"Peer joined: {name} ({ip})")
         self._log_system(f"{name} joined the network.")
         self._refresh_peers_list()
 
     def _prune_peers(self):
-        """Remove peers not seen for 15 seconds."""
         while self.running:
             time.sleep(5)
             now = time.time()
             stale = []
             with self.peers_lock:
-                for ip, info in self.peers.copy().items():
+                for ip, info in list(self.peers.items()):
                     if now - info["last_seen"] > 15:
                         stale.append((ip, info["name"]))
                         del self.peers[ip]
@@ -848,7 +774,6 @@ class LANOfficeApp:
                 self.root.after(0, self._on_peer_leave, ip, name)
 
     def _on_peer_leave(self, ip, name):
-        self.logger.info(f"Peer left: {name} ({ip})")
         self._log_system(f"{name} left the network.")
         self._refresh_peers_list()
 
@@ -856,14 +781,11 @@ class LANOfficeApp:
         self.peers_listbox.delete(0, "end")
         with self.peers_lock:
             for ip, info in self.peers.items():
-                self.peers_listbox.insert("end", f"ðŸŸ¢ {info['name']}")
+                self.peers_listbox.insert("end", f"🟢 {info['name']}")
         count = self.peers_listbox.size()
-        self.peer_status_label.config(
-            text=f"{count} user{'s' if count != 1 else ''} online")
+        self.peer_status_label.config(text=f"{count} user{'s' if count != 1 else ''} online")
 
-    # -- Chat (TCP listener) ------------------
     def _listen_chat(self):
-        self.logger.info("Chat listener started")
         srv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         srv.bind(("", CHAT_PORT))
@@ -872,38 +794,28 @@ class LANOfficeApp:
         while self.running:
             try:
                 conn, addr = srv.accept()
-                threading.Thread(target=self._handle_chat,
-                                 args=(conn, addr), daemon=True).start()
-            except socket.timeout:
-                pass
-            except Exception as e:
-                self.logger.error(f"Chat listen error: {e}")
+                threading.Thread(target=self._handle_chat, args=(conn, addr), daemon=True).start()
+            except socket.timeout: pass
+            except Exception: pass
         srv.close()
+
     def _handle_chat(self, conn, addr):
         try:
             raw_len = conn.recv(4)
-            if len(raw_len) < 4:
-                return
+            if len(raw_len) < 4: return
             msg_len = struct.unpack("!I", raw_len)[0]
             data = b""
             while len(data) < msg_len:
                 chunk = conn.recv(min(BUFFER_SIZE, msg_len - len(data)))
-                if not chunk:
-                    break
+                if not chunk: break
                 data += chunk
             msg = json.loads(data.decode())
             if msg.get("type") == "chat":
-                self.logger.debug(f"Chat from {addr}: {msg['text']}")
-                self.root.after(0, self._log_message,
-                                msg["name"], msg["text"], False)
-        except Exception:
-            self.logger.exception("Chat handling error")
-        finally:
-            conn.close()
+                self.root.after(0, self._log_message, msg["name"], msg["text"], False)
+        except Exception: pass
+        finally: conn.close()
 
-    # -- File transfer (TCP listener) ---------
     def _listen_file(self):
-        self.logger.info("File transfer listener started")
         srv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         srv.bind(("", FILE_PORT))
@@ -912,72 +824,57 @@ class LANOfficeApp:
         while self.running:
             try:
                 conn, addr = srv.accept()
-                threading.Thread(target=self._handle_file,
-                                 args=(conn, addr), daemon=True).start()
-            except socket.timeout:
-                pass
-            except Exception as e:
-                self.logger.error(f"File listen error: {e}")
+                threading.Thread(target=self._handle_file, args=(conn, addr), daemon=True).start()
+            except socket.timeout: pass
+            except Exception: pass
         srv.close()
 
     def _handle_file(self, conn, addr):
         try:
-            # Reset cancel flag for new transfer
             self.cancel_transfer = False
-            meta = self._receive_file_meta(conn)
-            if not meta:
-                return
-
+            raw_len = conn.recv(4)
+            if len(raw_len) < 4: return
+            meta_len = struct.unpack("!I", raw_len)[0]
+            meta_data = b""
+            while len(meta_data) < meta_len:
+                chunk = conn.recv(min(BUFFER_SIZE, meta_len - len(meta_data)))
+                if not chunk: break
+                meta_data += chunk
+            meta = json.loads(meta_data.decode())
             filename = meta["filename"]
             filesize = meta["filesize"]
             sender = meta.get("sender", addr[0])
             checksum = meta.get("checksum")
-            self.logger.info(f"File transfer from {addr}: {filename}")
 
             save_path = self._get_save_path(filename, filesize, sender)
             if not save_path:
                 conn.close()
                 return
 
-            self._receive_file_data(conn, save_path, filesize)
-            # Verify checksum if provided
+            received = 0
+            self.root.after(0, self._show_progress, True)
+            with open(save_path, "wb") as f:
+                while received < filesize:
+                    if self.cancel_transfer: break
+                    chunk = conn.recv(min(BUFFER_SIZE, filesize - received))
+                    if not chunk: break
+                    f.write(chunk)
+                    received += len(chunk)
+                    pct = (received / filesize) * 100
+                    self.root.after(0, self.progress_val.set, pct)
+            self.root.after(0, self._show_progress, False)
             if checksum:
-                received_checksum = self._compute_checksum(save_path)
-                if received_checksum == checksum:
-                    self.root.after(0, self._log_system, f"âœ“ File integrity verified: {filename}")
-                    self.logger.info(f"File checksum verified: {filename}")
-                else:
-                    self.root.after(0, self._log_system, f"âœ— File checksum mismatch! Expected {checksum}, got {received_checksum}")
-                    self.logger.error(f"Checksum mismatch for {filename}")
-            self.root.after(0, self._log_file,
-                            f"Received '{filename}' from {sender} â†’ saved to {save_path}", filename=filename)
-        except Exception:
-            self.logger.exception("File receive error")
-        finally:
-            conn.close()
-
-    def _receive_file_meta(self, conn):
-        raw_len = conn.recv(4)
-        if len(raw_len) < 4:
-            return None
-        meta_len = struct.unpack("!I", raw_len)[0]
-        meta_data = b""
-        while len(meta_data) < meta_len:
-            chunk = conn.recv(min(BUFFER_SIZE, meta_len - len(meta_data)))
-            if not chunk:
-                break
-            meta_data += chunk
-        return json.loads(meta_data.decode())
+                if self._compute_checksum(save_path) == checksum:
+                    self.root.after(0, self._log_system, f"✓ Verified: {filename}")
+            self.root.after(0, self._log_file, f"Received '{filename}' from {sender} → saved to {save_path}")
+        except Exception: pass
+        finally: conn.close()
 
     def _get_save_path(self, filename, filesize, sender):
         save_path_holder = [None]
         done_event = threading.Event()
-
         def ask_save():
-            answer = messagebox.askyesno(
-                "Incoming File",
-                f"{sender} wants to send you:\n{filename} "
-                f"({self._fmt_size(filesize)})\n\nAccept?")
+            answer = messagebox.askyesno("Incoming File", f"{sender} wants to send you:\n{filename} ({self._fmt_size(filesize)})\nAccept?")
             if answer:
                 if self.download_dir and os.path.exists(self.download_dir):
                     p = os.path.join(self.download_dir, filename)
@@ -988,41 +885,16 @@ class LANOfficeApp:
                     p = filedialog.asksaveasfilename(initialfile=filename, title="Save file as")
                 save_path_holder[0] = p
             done_event.set()
-
         self.root.after(0, ask_save)
         done_event.wait(timeout=60)
         return save_path_holder[0]
 
-    def _receive_file_data(self, conn, save_path, filesize):
-        received = 0
-        self.root.after(0, self._show_progress, True)
-        with open(save_path, "wb") as f:
-            while received < filesize:
-                if self.cancel_transfer:
-                    break
-                chunk = conn.recv(min(BUFFER_SIZE, filesize - received))
-                if not chunk:
-                    break
-                f.write(chunk)
-                received += len(chunk)
-                pct = (received / filesize) * 100
-                self.root.after(0, self.progress_val.set, pct)
-        self.root.after(0, self._show_progress, False)
-
-    # -----------------------------------------
-    #  CLEANUP
-    # -----------------------------------------
     def on_close(self):
         self.running = False
         self.root.destroy()
 
-
-# ---------------------------------------------
-#  ENTRY POINT
-# ---------------------------------------------
 if __name__ == "__main__":
     root = tk.Tk()
     app = LANOfficeApp(root)
     root.protocol("WM_DELETE_WINDOW", app.on_close)
     root.mainloop()
-
