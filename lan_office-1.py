@@ -14,6 +14,7 @@ import time
 import struct
 import logging
 import traceback
+import hashlib
 
 # ---------------------------------------------
 #  CONFIGURATION
@@ -278,10 +279,16 @@ class LANOfficeApp:
                               command=self._clear_chat_history)
         clear_btn.pack(side="right", pady=10, padx=(0, 6))
 
+        export_btn = tk.Button(header, text="📤 Export", font=(DEFAULT_FONT_FAMILY, 9),
+                          bg="#313244", fg="#cdd6f4", relief="flat",
+                          activebackground="#45475a", padx=10, cursor="hand2",
+                          command=self._export_chat_history)
+        export_btn.pack(side="right", pady=10, padx=(0, 6))
+
         dl_btn = tk.Button(header, text="📂 Folder", font=(DEFAULT_FONT_FAMILY, 9),
-                           bg="#313244", fg="#cdd6f4", relief="flat",
-                           activebackground="#45475a", padx=10, cursor="hand2",
-                           command=self._open_download_settings)
+                            bg="#313244", fg="#cdd6f4", relief="flat",
+                            activebackground="#45475a", padx=10, cursor="hand2",
+                            command=self._open_download_settings)
         dl_btn.pack(side="right", pady=10)
 
         self.dm_clear_btn = tk.Button(header, text="← Back to Group",
@@ -336,6 +343,11 @@ class LANOfficeApp:
         self.progress_frame = tk.Frame(main, bg="#181825", height=4)
         self.progress_frame.pack(fill="x", side="bottom")
         
+        # Cancel button
+        self.cancel_btn = tk.Button(self.progress_frame, text="✕ Cancel", font=("Segoe UI", 9),
+                                    bg="#f38ba8", fg="#1e1e2e", relief="flat", padx=8, cursor="hand2",
+                                    command=self._cancel_file_transfer)
+        
         self.progress_val = tk.DoubleVar(value=0)
         self.progress_bar = ttk.Progressbar(self.progress_frame, variable=self.progress_val,
                                             maximum=100, mode="determinate")
@@ -344,7 +356,8 @@ class LANOfficeApp:
         style.theme_use('default')
         style.configure("TProgressbar", thickness=4, bordercolor="#181825", 
                         background="#89b4fa", troughcolor="#181825")
-        self.progress_bar.pack(fill="x")
+        self.cancel_btn.pack(side="right", padx=8)
+        self.progress_bar.pack(fill="x", side="left", expand=True)
         self.progress_frame.pack_forget() # hide initially
 
         self._log_system("Welcome to LAN Office! Discovering peers on your network…")
@@ -435,6 +448,168 @@ class LANOfficeApp:
             self.chat_display.config(state="disabled")
             self._log_system("Chat history cleared.")
 
+    def _export_chat_history(self):
+        if not self.chat_history:
+            messagebox.showinfo("No History", "There is no chat history to export.")
+            return
+            
+        export_window = tk.Toplevel(self.root)
+        export_window.title("Export Chat History")
+        export_window.geometry("400x300")
+        export_window.configure(bg="#1e1e2e")
+        export_window.transient(self.root)
+        export_window.grab_set()
+        
+        # Center the window
+        export_window.update_idletasks()
+        x = self.root.winfo_x() + (self.root.winfo_width() // 2) - (export_window.winfo_width() // 2)
+        y = self.root.winfo_y() + (self.root.winfo_height() // 2) - (export_window.winfo_height() // 2)
+        export_window.geometry(f"+{x}+{y}")
+        
+        # Title
+        tk.Label(export_window, text="Export Chat History", 
+                font=(DEFAULT_FONT_FAMILY, 14, "bold"),
+                bg="#1e1e2e", fg="#cdd6f4").pack(pady=(20, 10))
+        
+        tk.Label(export_window, text="Choose export format:", 
+                font=(DEFAULT_FONT_FAMILY, 11),
+                bg="#1e1e2e", fg="#cdd6f4").pack(pady=(0, 20))
+        
+        # Button frame
+        btn_frame = tk.Frame(export_window, bg="#1e1e2e")
+        btn_frame.pack(pady=20)
+        
+        # Export buttons
+        tk.Button(btn_frame, text="Export as Text (.txt)", 
+                 font=(DEFAULT_FONT_FAMILY, 10),
+                 bg="#313244", fg="#cdd6f4", relief="flat",
+                 activebackground="#45475a", padx=10, pady=5,
+                 command=lambda: [export_window.destroy(), self._export_as_text()]).pack(pady=5, fill="x", padx=20)
+                 
+        tk.Button(btn_frame, text="Export as JSON (.json)", 
+                 font=(DEFAULT_FONT_FAMILY, 10),
+                 bg="#313244", fg="#cdd6f4", relief="flat",
+                 activebackground="#45475a", padx=10, pady=5,
+                 command=lambda: [export_window.destroy(), self._export_as_json()]).pack(pady=5, fill="x", padx=20)
+                 
+        tk.Button(btn_frame, text="Export as CSV (.csv)", 
+                 font=(DEFAULT_FONT_FAMILY, 10),
+                 bg="#313244", fg="#cdd6f4", relief="flat",
+                 activebackground="#45475a", padx=10, pady=5,
+                 command=lambda: [export_window.destroy(), self._export_as_csv()]).pack(pady=5, fill="x", padx=20)
+                 
+        tk.Button(btn_frame, text="Cancel", 
+                 font=(DEFAULT_FONT_FAMILY, 10),
+                 bg="#313244", fg="#cdd6f4", relief="flat",
+                 activebackground="#45475a", padx=10, pady=5,
+                 command=export_window.destroy).pack(pady=(20, 5), fill="x", padx=20)
+
+    def _export_as_text(self):
+        if not self.chat_history:
+            messagebox.showinfo("No History", "There is no chat history to export.")
+            return
+            
+        filename = filedialog.asksaveasfilename(
+            defaultextension=".txt",
+            filetypes=[("Text files", "*.txt"), ("All files", "*.*")],
+            title="Export chat history as text"
+        )
+        if not filename:
+            return
+            
+        try:
+            with open(filename, "w", encoding="utf-8") as f:
+                f.write("LAN Office Chat History Export\n")
+                f.write("=" * 40 + "\n\n")
+                for msg in self.chat_history:
+                    timestamp = msg.get("time_str", "Unknown")
+                    sender = msg.get("sender", "Unknown")
+                    text = msg.get("text", "")
+                    is_system = msg.get("is_system", False)
+                    filename_attr = msg.get("filename")
+                    
+                    if is_system:
+                        f.write(f"[{timestamp}] ● {text}\n")
+                    elif filename_attr:
+                        f.write(f"[{timestamp}] 📁 {text}\n")
+                    else:
+                        f.write(f"[{timestamp}] {sender}: {text}\n")
+                        
+            messagebox.showinfo("Export Successful", f"Chat history exported to:\n{filename}")
+            self._log_system(f"Exported chat history to {os.path.basename(filename)}")
+        except Exception as e:
+            messagebox.showerror("Export Error", f"Failed to export chat history:\n{str(e)}")
+            self.logger.error(f"Failed to export chat history: {e}")
+
+    def _export_as_json(self):
+        if not self.chat_history:
+            messagebox.showinfo("No History", "There is no chat history to export.")
+            return
+            
+        filename = filedialog.asksaveasfilename(
+            defaultextension=".json",
+            filetypes=[("JSON files", "*.json"), ("All files", "*.*")],
+            title="Export chat history as JSON"
+        )
+        if not filename:
+            return
+            
+        try:
+            # Prepare data for JSON export
+            export_data = {
+                "export_info": {
+                    "app": "LAN Office",
+                    "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
+                    "total_messages": len(self.chat_history)
+                },
+                "messages": self.chat_history
+            }
+            
+            with open(filename, "w", encoding="utf-8") as f:
+                json.dump(export_data, f, indent=2, ensure_ascii=False)
+                
+            messagebox.showinfo("Export Successful", f"Chat history exported to:\n{filename}")
+            self._log_system(f"Exported chat history to {os.path.basename(filename)}")
+        except Exception as e:
+            messagebox.showerror("Export Error", f"Failed to export chat history:\n{str(e)}")
+            self.logger.error(f"Failed to export chat history: {e}")
+
+    def _export_as_csv(self):
+        if not self.chat_history:
+            messagebox.showinfo("No History", "There is no chat history to export.")
+            return
+            
+        filename = filedialog.asksaveasfilename(
+            defaultextension=".csv",
+            filetypes=[("CSV files", "*.csv"), ("All files", "*.*")],
+            title="Export chat history as CSV"
+        )
+        if not filename:
+            return
+            
+        try:
+            import csv
+            with open(filename, "w", newline="", encoding="utf-8") as f:
+                writer = csv.writer(f)
+                # Write header
+                writer.writerow(["Timestamp", "Sender", "Message", "Is System", "Filename"])
+                
+                # Write data
+                for msg in self.chat_history:
+                    writer.writerow([
+                        msg.get("time_str", ""),
+                        msg.get("sender", ""),
+                        msg.get("text", ""),
+                        "Yes" if msg.get("is_system", False) else "No",
+                        msg.get("filename", "")
+                    ])
+                    
+            messagebox.showinfo("Export Successful", f"Chat history exported to:\n{filename}")
+            self._log_system(f"Exported chat history to {os.path.basename(filename)}")
+        except Exception as e:
+            messagebox.showerror("Export Error", f"Failed to export chat history:\n{str(e)}")
+            self.logger.error(f"Failed to export chat history: {e}")
+
     # -----------------------------------------
     #  SENDING
     # -----------------------------------------
@@ -479,29 +654,27 @@ class LANOfficeApp:
 
     def _send_file_dialog(self):
         target_ip = self.selected_peer_ip
-        if not target_ip:
-            # Ask user to select a peer first
-            with self.peers_lock:
-                peer_count = len(self.peers)
-            if peer_count == 0:
-                messagebox.showinfo("No peers", "No peers online yet.")
-                return
+        if not self.selected_peer_ip:
             messagebox.showinfo("Select a recipient",
-                                "Click a user in the sidebar first, then press 📎 File.")
+                                "Click a user in the sidebar first, then click 📎 File to send a file.")
             return
 
         path = filedialog.askopenfilename(title="Select a file to send")
         if not path:
             return
 
+        self.cancel_transfer = False
         threading.Thread(target=self._send_file,
                          args=(target_ip, path),
                          daemon=True).start()
 
     def _send_file(self, ip, path):
         try:
+            # Reset cancel flag for new transfer
+            self.cancel_transfer = False
             filename = os.path.basename(path)
             filesize = os.path.getsize(path)
+            checksum = self._compute_checksum(path)
             self.logger.info(f"Sending file to {ip}: {filename}")
 
             s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -512,7 +685,8 @@ class LANOfficeApp:
             meta = json.dumps({
                 "filename": filename,
                 "filesize": filesize,
-                "sender": self.username
+                "sender": self.username,
+                "checksum": checksum
             }).encode()
             s.sendall(struct.pack("!I", len(meta)) + meta)
 
@@ -521,6 +695,8 @@ class LANOfficeApp:
             sent = 0
             with open(path, "rb") as f:
                 while True:
+                    if self.cancel_transfer:
+                        break
                     chunk = f.read(BUFFER_SIZE)
                     if not chunk:
                         break
@@ -530,28 +706,51 @@ class LANOfficeApp:
                     self.root.after(0, self.progress_val.set, pct)
             s.close()
             self.root.after(0, self._show_progress, False)
+            self.logger.info(f"File sent with checksum: {checksum}")
 
             self.root.after(0, self._log_file,
-                            f"Sent '{filename}' ({self._fmt_size(filesize)}) to "
-                            f"{self.peers.get(ip, {}).get('name', ip)}", filename=filename)
+                                 f"Sent '{filename}' ({self._fmt_size(filesize)}) to "
+                                 f"{self.peers.get(ip, {}).get('name', ip)}", filename=filename)
         except Exception as e:
             self.logger.exception(f"File send failed to {ip}: {filename}")
             self.root.after(0, self._log_system, f"File send failed: {e}")
 
     @staticmethod
     def _fmt_size(n):
-        for unit in ("B", "KB", "MB", "GB"):
-            if n < 1024:
-                return f"{n:.1f} {unit}"
-            n /= 1024
-        return f"{n:.1f} TB"
+         for unit in ("B", "KB", "MB", "GB"):
+             if n < 1024:
+                 return f"{n:.1f} {unit}"
+             n /= 1024
+         return f"{n:.1f} TB"
 
-    def _show_progress(self, show=True):
+     @staticmethod
+     def _compute_checksum(filepath):
+         """Compute SHA256 checksum of a file."""
+         sha256 = hashlib.sha256()
+         with open(filepath, "rb") as f:
+             while True:
+                 chunk = f.read(BUFFER_SIZE)
+                 if not chunk:
+                     break
+                 sha256.update(chunk)
+         return sha256.hexdigest()
+
+     def _show_progress(self, show=True):
         if show:
             self.progress_frame.pack(fill="x", side="bottom")
             self.progress_val.set(0)
+            # Show cancel button first (right side), then progress bar (left side)
+            self.cancel_btn.pack(side="right", padx=8)
+            self.progress_bar.pack(fill="x", side="left", expand=True)
         else:
+            self.cancel_btn.pack_forget()
             self.progress_frame.pack_forget()
+
+    def _cancel_file_transfer(self):
+        """Cancel an ongoing file transfer."""
+        self.cancel_transfer = True
+        self._show_progress(False)
+        self._log_system("File transfer cancelled.")
 
     # ==========================================
     #  NETWORKING – START
@@ -722,6 +921,8 @@ class LANOfficeApp:
 
     def _handle_file(self, conn, addr):
         try:
+            # Reset cancel flag for new transfer
+            self.cancel_transfer = False
             meta = self._receive_file_meta(conn)
             if not meta:
                 return
@@ -729,6 +930,7 @@ class LANOfficeApp:
             filename = meta["filename"]
             filesize = meta["filesize"]
             sender = meta.get("sender", addr[0])
+            checksum = meta.get("checksum")
             self.logger.info(f"File transfer from {addr}: {filename}")
 
             save_path = self._get_save_path(filename, filesize, sender)
@@ -737,6 +939,15 @@ class LANOfficeApp:
                 return
 
             self._receive_file_data(conn, save_path, filesize)
+            # Verify checksum if provided
+            if checksum:
+                received_checksum = self._compute_checksum(save_path)
+                if received_checksum == checksum:
+                    self.root.after(0, self._log_system, f"✓ File integrity verified: {filename}")
+                    self.logger.info(f"File checksum verified: {filename}")
+                else:
+                    self.root.after(0, self._log_system, f"✗ File checksum mismatch! Expected {checksum}, got {received_checksum}")
+                    self.logger.error(f"Checksum mismatch for {filename}")
             self.root.after(0, self._log_file,
                             f"Received '{filename}' from {sender} → saved to {save_path}", filename=filename)
         except Exception:
@@ -786,6 +997,8 @@ class LANOfficeApp:
         self.root.after(0, self._show_progress, True)
         with open(save_path, "wb") as f:
             while received < filesize:
+                if self.cancel_transfer:
+                    break
                 chunk = conn.recv(min(BUFFER_SIZE, filesize - received))
                 if not chunk:
                     break
