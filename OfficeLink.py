@@ -7,6 +7,7 @@ import io
 import html
 import winsound
 import threading
+import hashlib
 from datetime import datetime
 from PIL import Image
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QHBoxLayout, 
@@ -30,73 +31,127 @@ MAX_HISTORY_LOAD = 100  # max messages to load on startup
 # --- STYLING (QSS) ---
 STYLESHEET = """
     QWidget {
-        font-family: 'Montserrat', 'Segoe UI', sans-serif;
+        font-family: 'Segoe UI', 'Roboto', 'Montserrat', sans-serif;
+        color: #2d3436;
     }
     #centralFrame {
-        background-color: rgba(240, 242, 245, 230);
-        border-radius: 20px;
+        background: qlineargradient(x1:0, y1:0, x2:1, y2:1, 
+            stop:0 rgba(255, 255, 255, 0.9), 
+            stop:1 rgba(240, 245, 255, 0.85));
+        border-radius: 24px;
+        border: 1px solid rgba(255, 255, 255, 0.6);
     }
     QListWidget { 
         background-color: transparent; 
         border: none; 
-        font-size: 14px; 
+        outline: none;
     }
     QListWidget::item { 
-        background-color: rgba(255, 255, 255, 0.4); 
-        border: 1px solid rgba(255, 255, 255, 0.6);
-        border-radius: 12px;
-        margin: 4px 8px;
-        padding: 12px; 
+        background-color: rgba(255, 255, 255, 0.5); 
+        border: 1px solid rgba(0, 0, 0, 0.05);
+        border-radius: 14px;
+        margin: 6px 10px;
+        padding: 14px; 
+        color: #2d3436;
+    }
+    QListWidget::item:hover {
+        background-color: rgba(25, 118, 210, 0.08);
+        border: 1px solid rgba(25, 118, 210, 0.2);
     }
     QListWidget::item:selected { 
-        background-color: rgba(255, 255, 255, 0.8); 
-        color: #1976d2; 
-        border: 1px solid #1976d2; 
-        font-weight: bold;
-    }
-    QTextEdit { 
-        background-color: rgba(255, 255, 255, 0.6); 
-        border: 1px solid rgba(255, 255, 255, 0.8); 
-        border-radius: 12px; 
-        padding: 10px; 
-    }
-    QLineEdit { 
-        background-color: rgba(255, 255, 255, 0.9); 
-        border: 1px solid rgba(255, 255, 255, 1.0); 
-        border-radius: 18px; 
-        padding: 8px 15px; 
-    }
-    QPushButton { background-color: #1976d2; color: white; border-radius: 15px; padding: 8px 15px; font-weight: bold; }
-    QPushButton:hover { background-color: #1565c0; }
-    #file_btn { background-color: transparent; border: none; padding: 5px; }
-    #file_btn:hover { background-color: rgba(255, 255, 255, 0.5); border-radius: 15px; }
-    #send_btn, #broadcast_btn { background-color: #1976d2; border-radius: 18px; padding: 8px; }
-    #close_btn { background-color: #ff5f56; border-radius: 12px; font-weight: bold; color: white; }
-    #close_btn:hover { background-color: #e0443e; }
-    #min_btn { background-color: #ffbd2e; border-radius: 12px; font-weight: bold; color: white; }
-    #min_btn:hover { background-color: #dea123; }
-    #settings_btn { background-color: rgba(100,100,100,0.15); border-radius: 12px; color: #444; font-size: 14px; padding: 2px 6px; border: none; }
-    #settings_btn:hover { background-color: rgba(100,100,100,0.3); }
-    #username_label { 
-        font-size: 13px; 
-        font-weight: bold; 
+        background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #1976d2, stop:1 #42a5f5);
         color: white; 
-        padding: 4px 12px;
-        background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #1976d2, stop:1 #64b5f6); 
-        border-radius: 12px;
-        border: 1px solid rgba(255,255,255,0.2);
+        border: none;
+        font-weight: 600;
     }
-    #username_label:hover { 
-        background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #1565c0, stop:1 #42a5f5); 
-        border: 1px solid rgba(255,255,255,0.5);
+    QTextBrowser { 
+        background-color: transparent; 
+        border: none;
+        padding: 5px;
     }
-    #mgmt_badge { font-size: 10px; font-weight: bold; color: white;
-        background-color: #e65100; border-radius: 6px; padding: 1px 5px; }
+    /* Modern Slim Scrollbar */
+    QScrollBar:vertical {
+        border: none;
+        background: transparent;
+        width: 6px;
+        margin: 0px;
+    }
+    QScrollBar::handle:vertical {
+        background: rgba(0, 0, 0, 0.15);
+        min-height: 30px;
+        border-radius: 3px;
+    }
+    QScrollBar::handle:vertical:hover {
+        background: rgba(25, 118, 210, 0.4);
+    }
+    QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+        height: 0px;
+    }
+    
+    QLineEdit { 
+        background-color: white; 
+        border: 1px solid rgba(0, 0, 0, 0.1); 
+        border-radius: 20px; 
+        padding: 10px 18px;
+        font-size: 13px;
+    }
+    QLineEdit:focus {
+        border: 1.5px solid #1976d2;
+    }
+    
+    QPushButton { 
+        background-color: #1976d2; 
+        color: white; 
+        border-radius: 18px; 
+        padding: 10px 20px; 
+        font-weight: 600;
+        font-size: 13px;
+    }
+    QPushButton:hover { 
+        background-color: #1565c0; 
+    }
+    QPushButton:pressed {
+        background-color: #0d47a1;
+        padding-top: 11px;
+        padding-left: 21px;
+    }
+    
+    #file_btn { 
+        background-color: rgba(0, 0, 0, 0.04); 
+        border: none; 
+        border-radius: 18px;
+        padding: 8px; 
+    }
+    #file_btn:hover { 
+        background-color: rgba(25, 118, 210, 0.1); 
+    }
+    
+    #close_btn { background-color: rgba(255, 95, 86, 0.15); color: #d32f2f; border-radius: 12px; }
+    #close_btn:hover { background-color: #ff5f56; color: white; }
+    
+    #min_btn { background-color: rgba(255, 189, 46, 0.15); color: #f57c00; border-radius: 12px; }
+    #min_btn:hover { background-color: #ffbd2e; color: white; }
+    
+    #settings_btn { background-color: rgba(0,0,0,0.05); border-radius: 12px; color: #555; }
+    #settings_btn:hover { background-color: rgba(0,0,0,0.1); }
+    
+    #username_label { 
+        font-size: 12px; 
+        font-weight: 700; 
+        color: white; 
+        padding: 6px 15px;
+        background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #2980b9, stop:1 #3498db); 
+        border-radius: 15px;
+    }
+    #mgmt_badge { 
+        font-size: 9px; font-weight: 800; color: white;
+        background-color: #ff3d00; border-radius: 8px; padding: 2px 6px; 
+    }
     #transfer_bar_widget {
-        background-color: rgba(255, 255, 255, 0.75);
-        border: 1px solid rgba(25, 118, 210, 0.3);
-        border-radius: 10px;
-        padding: 4px 8px;
+        background: white;
+        border: 1px solid rgba(25, 118, 210, 0.15);
+        border-radius: 16px;
+        padding: 10px;
     }
     #transfer_status_label {
         font-size: 11px;
@@ -124,6 +179,47 @@ STYLESHEET = """
         background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
             stop:0 #2e7d32, stop:1 #66bb6a);
     }
+"""
+
+DARK_STYLESHEET = """
+    QWidget {
+        font-family: 'Segoe UI', 'Roboto', 'Montserrat', sans-serif;
+        color: #e0e0e0;
+    }
+    #centralFrame {
+        background: qlineargradient(x1:0, y1:0, x2:1, y2:1, 
+            stop:0 #1a1c2c, 
+            stop:1 #11111b);
+        border-radius: 24px;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    QListWidget::item { 
+        background-color: rgba(255, 255, 255, 0.05); 
+        border: 1px solid rgba(255, 255, 255, 0.03);
+        color: #e0e0e0;
+    }
+    QListWidget::item:hover {
+        background-color: rgba(255, 255, 255, 0.1);
+    }
+    QListWidget::item:selected { 
+        background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #1e66f5, stop:1 #74c7ec);
+        color: white; 
+    }
+    QTextBrowser { background-color: transparent; }
+    QLineEdit { 
+        background-color: #313244; 
+        border: 1px solid rgba(255, 255, 255, 0.1); 
+        color: white;
+    }
+    #file_btn { background-color: rgba(255, 255, 255, 0.05); }
+    #settings_btn { background-color: rgba(255,255,255,0.05); color: #ccc; }
+    #transfer_bar_widget {
+        background: #1e1e2e;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    #transfer_status_label { color: #74c7ec; }
+    QProgressBar { background-color: rgba(255, 255, 255, 0.05); }
+"""
 """
 
 # --- NETWORKING THREADS ---
@@ -459,16 +555,16 @@ class FloatingIcon(QWidget):
         self._drag_pos = None
 
     def update_style(self, alerting=False):
-        color1 = "#ff5252" if alerting else "#1976d2"
-        color2 = "#ff1744" if alerting else "#42a5f5"
+        color1 = "#ff3d00" if alerting else "#1976d2"
+        color2 = "#ff6e40" if alerting else "#42a5f5"
         self.btn.setStyleSheet(f"""
             QPushButton {{
-                background: qradialgradient(cx:0.3, cy:0.3, radius:1, fx:0.3, fy:0.3, stop:0 {color2}, stop:1 {color1});
+                background: qradialgradient(cx:0.5, cy:0.5, radius:0.5, fx:0.5, fy:0.5, stop:0 {color2}, stop:1 {color1});
                 border-radius: 32px;
                 color: white;
-                font-weight: bold;
-                font-size: 22px;
-                border: 3px solid rgba(255, 255, 255, 0.8);
+                font-weight: 800;
+                font-size: 20px;
+                border: 2px solid rgba(255, 255, 255, 0.9);
             }}
             QPushButton:hover {{
                 border: 3px solid white;
@@ -489,11 +585,20 @@ class FloatingIcon(QWidget):
         self._drag_pos = None
         event.accept()
         
-    def pulse(self):
-        self.update_style(True)
-        # Pulse animation using opacity or scale would be complex for a simple pulse
-        # Let's just flicker the style for now or use a quick timer
-        QTimer.singleShot(2000, lambda: self.update_style(False))
+    def pulse(self, alerting=True):
+        """Create a smooth breathing pulse effect."""
+        if alerting:
+            self.update_style(True)
+            self.pulse_anim = QPropertyAnimation(self, b"windowOpacity")
+            self.pulse_anim.setDuration(800)
+            self.pulse_anim.setStartValue(1.0)
+            self.pulse_anim.setEndValue(0.6)
+            self.pulse_anim.setEasingCurve(QEasingCurve.Type.InOutSine)
+            self.pulse_anim.setLoopCount(6) # Pulse 3 times (down and back)
+            self.pulse_anim.finished.connect(lambda: self.update_style(False))
+            self.pulse_anim.start()
+        else:
+            self.update_style(False)
 
     def restore_main(self):
         self.hide()
@@ -539,6 +644,7 @@ class OfficeLink(QMainWindow):
         self.settings = QSettings("RCNMedia", "OfficeLink")
         self.username = self.settings.value("username", socket.gethostname())
         self.is_mgmt = self.settings.value("is_mgmt", False, type=bool)
+        self.dark_mode = self.settings.value("dark_mode", False, type=bool)
         
         # Enforce management restriction on startup
         if self.username not in ALLOWED_MGMT_USERS:
@@ -604,13 +710,20 @@ class OfficeLink(QMainWindow):
 
         controls_layout.addStretch()
 
+        # Theme Toggle
+        self.theme_btn = QPushButton("🌙" if not self.dark_mode else "☀️")
+        self.theme_btn.setObjectName("settings_btn")
+        self.theme_btn.setFixedSize(28, 25)
+        self.theme_btn.clicked.connect(self.toggle_theme)
+        controls_layout.addWidget(self.theme_btn)
+
         # Settings gear button
         self.settings_btn = QPushButton("⚙")
         self.settings_btn.setObjectName("settings_btn")
         self.settings_btn.setFixedSize(28, 25)
         self.settings_btn.setToolTip("Settings / Edit Profile")
         self.settings_btn.clicked.connect(self.edit_profile)
-
+        
         self.min_btn = QPushButton()
         self.min_btn.setIcon(self.style().standardIcon(self.style().StandardPixmap.SP_TitleBarMinButton))
         self.min_btn.setFixedSize(25, 25)
@@ -638,8 +751,12 @@ class OfficeLink(QMainWindow):
         
         self.staff_list = QListWidget()
         self.staff_list.setToolTip("Online Users")
+        self.staff_list.itemSelectionChanged.connect(self.on_selection_changed)
         sidebar_layout.addWidget(self.staff_list)
         content_layout.addWidget(sidebar_widget, 1)
+        
+        if self.dark_mode:
+            self.setStyleSheet(DARK_STYLESHEET)
         
         # Chat Area
         chat_widget = QWidget()
@@ -809,45 +926,54 @@ class OfficeLink(QMainWindow):
         time_str = datetime.now().strftime("%H:%M")
         safe_msg = html.escape(msg).replace('\n', '<br>')
         
-        # Premium Colors
+        # Premium Modern Palette
         my_bg = "#1976d2"
-        other_bg = "white"
-        broadcast_bg = "#e65100"
+        other_bg = "#ffffff"
+        broadcast_bg = "#ff3d00"
+        
+        font_style = "font-family: 'Segoe UI', sans-serif;"
         
         if is_self:
             bg = broadcast_bg if is_broadcast else my_bg
-            color = "white"
             bubble_html = f"""
-                <table width="100%">
-                    <tr>
-                        <td width="15%"></td>
-                        <td align="right">
-                            <div style="background-color: {bg}; color: {color}; border-radius: 12px; padding: 10px; border: 1px solid rgba(0,0,0,0.1); font-family: 'Montserrat', 'Segoe UI', sans-serif;">
-                                <span style="font-size: 10px; font-weight: bold; opacity: 0.8;">{"Broadcast" if is_broadcast else "You"} • {time_str}</span><br>
-                                <span style="font-size: 13px;">{safe_msg}</span>
-                            </div>
-                        </td>
-                    </tr>
-                </table>
+                <div style="margin: 8px 0px;">
+                    <table width="100%">
+                        <tr>
+                            <td width="20%"></td>
+                            <td align="right">
+                                <div style="background-color: {bg}; color: white; border-radius: 16px; border-bottom-right-radius: 4px; padding: 12px; {font_style}">
+                                    <div style="font-size: 10px; font-weight: 700; margin-bottom: 4px; opacity: 0.9;">
+                                        {"BROADCAST" if is_broadcast else "YOU"} • {time_str}
+                                    </div>
+                                    <div style="font-size: 13px; line-height: 1.4;">{safe_msg}</div>
+                                </div>
+                            </td>
+                        </tr>
+                    </table>
+                </div>
             """
         else:
             bubble_html = f"""
-                <table width="100%">
-                    <tr>
-                        <td align="left">
-                            <div style="background-color: {other_bg}; color: #333; border-radius: 12px; padding: 10px; border: 1px solid #ddd; font-family: 'Montserrat', 'Segoe UI', sans-serif;">
-                                <span style="font-size: 10px; font-weight: bold; color: #1976d2;">{sender} • {time_str}</span><br>
-                                <span style="font-size: 13px;">{safe_msg}</span>
-                            </div>
-                        </td>
-                        <td width="15%"></td>
-                    </tr>
-                </table>
+                <div style="margin: 8px 0px;">
+                    <table width="100%">
+                        <tr>
+                            <td align="left">
+                                <div style="background-color: {other_bg}; color: #2d3436; border-radius: 16px; border-bottom-left-radius: 4px; padding: 12px; border: 1px solid rgba(0,0,0,0.06); {font_style}">
+                                    <div style="font-size: 10px; font-weight: 700; color: #1976d2; margin-bottom: 4px;">
+                                        {sender.upper()} • {time_str}
+                                    </div>
+                                    <div style="font-size: 13px; line-height: 1.4;">{safe_msg}</div>
+                                </div>
+                            </td>
+                            <td width="20%"></td>
+                        </tr>
+                    </table>
+                </div>
             """
         
         self.display.append("")
         self.display.insertHtml(bubble_html)
-        # Scroll to bottom
+        # Smooth scroll to bottom
         self.display.verticalScrollBar().setValue(self.display.verticalScrollBar().maximum())
 
     def inline_rename(self):
@@ -979,18 +1105,89 @@ class OfficeLink(QMainWindow):
         self.discovery.user_lost.connect(self.remove_user)
         self.discovery.start()
         
+class UserItemWidget(QWidget):
+    def __init__(self, name, ip_port):
+        super().__init__()
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(5, 5, 5, 5)
+        layout.setSpacing(10)
+        
+        # Create a colorful circular avatar based on name
+        self.avatar = QLabel(name[0].upper() if name else "?")
+        self.avatar.setFixedSize(32, 32)
+        self.avatar.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        
+        # Generate color based on name hash
+        h = int(hashlib.md5(name.encode()).hexdigest(), 16)
+        hue = h % 360
+        self.avatar.setStyleSheet(f"""
+            background-color: hsv({hue}, 150, 200);
+            color: white;
+            border-radius: 16px;
+            font-weight: bold;
+            font-size: 14px;
+        """)
+        
+        info_layout = QVBoxLayout()
+        info_layout.setSpacing(0)
+        self.name_label = QLabel(name)
+        self.name_label.setStyleSheet("font-weight: 600; font-size: 13px; color: inherit;")
+        self.ip_label = QLabel(ip_port)
+        self.ip_label.setStyleSheet("font-size: 10px; color: rgba(0,0,0,0.5);")
+        
+        info_layout.addWidget(self.name_label)
+        info_layout.addWidget(self.ip_label)
+        
+        layout.addWidget(self.avatar)
+        layout.addLayout(info_layout)
+        layout.addStretch()
+
+    def update_selection(self, selected):
+        if selected:
+            self.ip_label.setStyleSheet("font-size: 10px; color: rgba(255,255,255,0.7);")
+        else:
+            self.ip_label.setStyleSheet("font-size: 10px; color: rgba(0,0,0,0.5);")
+
     def add_user(self, name, ip_port):
         display_text = f"{name} ({ip_port})"
         if not self.staff_list.findItems(display_text, Qt.MatchFlag.MatchStartsWith):
-            item = QListWidgetItem(display_text)
+            item = QListWidgetItem()
             item.setData(Qt.ItemDataRole.UserRole, ip_port)
+            item.setSizeHint(QSize(0, 50))
             self.staff_list.addItem(item)
+            
+            widget = UserItemWidget(name, ip_port)
+            self.staff_list.setItemWidget(item, widget)
             
     def remove_user(self, name):
         for i in range(self.staff_list.count()):
-            if self.staff_list.item(i).text().startswith(f"{name} "):
+            widget = self.staff_list.itemWidget(self.staff_list.item(i))
+            if widget and widget.name_label.text() == name:
                 self.staff_list.takeItem(i)
                 break
+
+    def on_selection_changed(self):
+        """Update UserItemWidget styling when selection changes."""
+        for i in range(self.staff_list.count()):
+            item = self.staff_list.item(i)
+            widget = self.staff_list.itemWidget(item)
+            if widget:
+                widget.update_selection(item.isSelected())
+
+    def toggle_theme(self):
+        """Toggle between light (glass) and dark (catppuccin-ish) themes."""
+        self.dark_mode = not self.dark_mode
+        self.settings.setValue("dark_mode", self.dark_mode)
+        
+        if self.dark_mode:
+            self.setStyleSheet(DARK_STYLESHEET)
+            self.theme_btn.setText("☀️")
+        else:
+            self.setStyleSheet(STYLESHEET)
+            self.theme_btn.setText("🌙")
+        
+        # Force a refresh of the staff list widgets to inherit theme colors
+        self.on_selection_changed()
 
     def send_network_message(self, target_ip_port, content, msg_type="chat", extra_data=None):
         ip, port = target_ip_port.split(':')

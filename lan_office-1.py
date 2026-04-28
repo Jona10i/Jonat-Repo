@@ -98,21 +98,36 @@ class LANOfficeApp:
     #  CONFIG & PERSISTENCE
     # ==========================================
     def _load_config(self):
-        self.config = {"username": "", "download_dir": ""}
+        self.config = {"username": "", "download_dir": "", "broadcast_port": BROADCAST_PORT, "chat_port": CHAT_PORT, "file_port": FILE_PORT, "broadcast_interval": BROADCAST_INTERVAL, "max_history_load": MAX_HISTORY_LOAD}
         self.username = ""
         self.download_dir = ""
+        self.broadcast_port = BROADCAST_PORT
+        self.chat_port = CHAT_PORT
+        self.file_port = FILE_PORT
+        self.broadcast_interval = BROADCAST_INTERVAL
+        self.max_history_load = MAX_HISTORY_LOAD
         if os.path.exists(CONFIG_FILE):
             try:
                 with open(CONFIG_FILE, "r") as f:
                     self.config = json.load(f)
                     self.username = self.config.get("username", "")
                     self.download_dir = self.config.get("download_dir", "")
+                    self.broadcast_port = self.config.get("broadcast_port", BROADCAST_PORT)
+                    self.chat_port = self.config.get("chat_port", CHAT_PORT)
+                    self.file_port = self.config.get("file_port", FILE_PORT)
+                    self.broadcast_interval = self.config.get("broadcast_interval", BROADCAST_INTERVAL)
+                    self.max_history_load = self.config.get("max_history_load", MAX_HISTORY_LOAD)
             except Exception:
                 self.logger.debug("Failed to load config file", exc_info=True)
 
     def _save_config(self):
         self.config["username"] = self.username
         self.config["download_dir"] = self.download_dir
+        self.config["broadcast_port"] = self.broadcast_port
+        self.config["chat_port"] = self.chat_port
+        self.config["file_port"] = self.file_port
+        self.config["broadcast_interval"] = self.broadcast_interval
+        self.config["max_history_load"] = self.max_history_load
         try:
             with open(CONFIG_FILE, "w") as f:
                 json.dump(self.config, f)
@@ -126,7 +141,7 @@ class LANOfficeApp:
         try:
             with open(CHAT_HISTORY_FILE, "r", encoding="utf-8") as f:
                 lines = f.readlines()
-            for line in lines[-MAX_HISTORY_LOAD:]:
+            for line in lines[-self.max_history_load:]:
                 try:
                     msg = json.loads(line.strip())
                     self.chat_history.append(msg)
@@ -326,20 +341,19 @@ class LANOfficeApp:
         self.progress_frame.pack(fill="x", side="bottom")
         
         # Cancel button
-        self.cancel_btn = tk.Button(self.progress_frame, text="âœ• Cancel", font=("Segoe UI", 9),
+        self.cancel_btn = tk.Button(self.progress_frame, text="✕ Cancel", font=("Segoe UI", 9),
                                     bg="#f38ba8", fg="#1e1e2e", relief="flat", padx=8, cursor="hand2",
                                     command=self._cancel_file_transfer)
-        
+
         self.progress_val = tk.DoubleVar(value=0)
         self.progress_bar = ttk.Progressbar(self.progress_frame, variable=self.progress_val,
                                             maximum=100, mode="determinate")
         # Style the progress bar
         style = ttk.Style()
         style.theme_use('default')
-        style.configure("TProgressbar", thickness=4, bordercolor="#181825", 
+        style.configure("TProgressbar", thickness=4, bordercolor="#181825",
                         background="#89b4fa", troughcolor="#181825")
-        self.cancel_btn.pack(side="right", padx=8)
-        self.progress_bar.pack(fill="x", side="left", expand=True)
+        self.progress_bar.pack(fill="x")
         self.progress_frame.pack_forget() # hide initially
 
         self._log_system("Welcome to LAN Office! Discovering peers on your networkâ€¦")
@@ -375,13 +389,94 @@ class LANOfficeApp:
         self._save_message("FILE", text, filename=filename)
 
     def _open_settings(self):
-        new_name = tk.simpledialog.askstring("Profile", "Change your display name:",
-                                             initialvalue=self.username)
-        if new_name and new_name.strip() and new_name.strip() != self.username:
-            self.username = new_name.strip()
-            self._save_config()
-            self._log_system(f"You changed your name to {self.username}")
-            # The next presence broadcast will update others
+        settings_win = tk.Toplevel(self.root)
+        settings_win.title("Settings")
+        settings_win.geometry("400x350")
+        settings_win.configure(bg="#1e1e2e")
+        settings_win.resizable(False, False)
+
+        # Labels and entries
+        fields = {}
+        labels = ["Display name:", "UDP Broadcast Port:", "TCP Chat Port:", "TCP File Port:", "Broadcast Interval (sec):", "Max history load:"]
+        defaults = [self.username, str(self.broadcast_port), str(self.chat_port), str(self.file_port), str(self.broadcast_interval), str(self.max_history_load)]
+        y_pos = 20
+        for i, label in enumerate(labels):
+            tk.Label(settings_win, text=label, bg="#1e1e2e", fg="white", font=("Segoe UI", 10)).place(x=20, y=y_pos)
+            entry = tk.Entry(settings_win, font=("Segoe UI", 10))
+            entry.insert(0, defaults[i])
+            entry.place(x=180, y=y_pos, width=200)
+            fields[label] = entry
+            y_pos += 40
+
+        def save_settings():
+            # Validate and save
+            try:
+                new_name = fields["Display name:"].get().strip()
+                if not new_name:
+                    messagebox.showerror("Error", "Display name cannot be empty.")
+                    return
+
+                new_broadcast_port = int(fields["UDP Broadcast Port:"].get())
+                new_chat_port = int(fields["TCP Chat Port:"].get())
+                new_file_port = int(fields["TCP File Port:"].get())
+                new_interval = int(fields["Broadcast Interval (sec):"].get())
+                new_max_history = int(fields["Max history load:"].get())
+
+                if not (1024 <= new_broadcast_port <= 65535):
+                    messagebox.showerror("Error", "Broadcast port must be between 1024 and 65535.")
+                    return
+                if not (1024 <= new_chat_port <= 65535):
+                    messagebox.showerror("Error", "Chat port must be between 1024 and 65535.")
+                    return
+                if not (1024 <= new_file_port <= 65535):
+                    messagebox.showerror("Error", "File port must be between 1024 and 65535.")
+                    return
+                if new_interval <= 0:
+                    messagebox.showerror("Error", "Broadcast interval must be greater than 0.")
+                    return
+                if new_max_history <= 0:
+                    messagebox.showerror("Error", "Max history load must be greater than 0.")
+                    return
+
+                # Check if ports changed
+                ports_changed = (new_broadcast_port != self.broadcast_port or
+                                 new_chat_port != self.chat_port or
+                                 new_file_port != self.file_port)
+
+                # Update
+                old_name = self.username
+                self.username = new_name
+                self.broadcast_port = new_broadcast_port
+                self.chat_port = new_chat_port
+                self.file_port = new_file_port
+                self.broadcast_interval = new_interval
+                self.max_history_load = new_max_history
+                self._save_config()
+
+                # Log changes
+                if new_name != old_name:
+                    self._log_system(f"You changed your name to {self.username}")
+                if ports_changed:
+                    self._log_system("Network settings updated. Restarting networking...")
+                    # Restart networking
+                    self.running = False
+                    settings_win.after(2000, lambda: self._start_networking())
+                else:
+                    self._log_system("Settings saved.")
+
+                settings_win.destroy()
+
+            except ValueError:
+                messagebox.showerror("Error", "Invalid input. Ports and numbers must be integers.")
+
+        def cancel():
+            settings_win.destroy()
+
+        # Buttons
+        save_btn = tk.Button(settings_win, text="Save", command=save_settings, bg="#4CAF50", fg="white", font=("Segoe UI", 10))
+        save_btn.place(x=120, y=y_pos + 10, width=80)
+        cancel_btn = tk.Button(settings_win, text="Cancel", command=cancel, bg="#f44336", fg="white", font=("Segoe UI", 10))
+        cancel_btn.place(x=220, y=y_pos + 10, width=80)
 
     def _open_download_settings(self):
         path = filedialog.askdirectory(title="Select Default Downloads Folder",
@@ -606,14 +701,14 @@ class LANOfficeApp:
 
         if self.selected_peer_ip:
             threading.Thread(target=self._tcp_send,
-                             args=(self.selected_peer_ip, CHAT_PORT, payload),
+                             args=(self.selected_peer_ip, self.chat_port, payload),
                              daemon=True).start()
         else:
             with self.peers_lock:
                 targets = list(self.peers.keys())
             for ip in targets:
                 threading.Thread(target=self._tcp_send,
-                                 args=(ip, CHAT_PORT, payload),
+                                 args=(ip, self.chat_port, payload),
                                  daemon=True).start()
 
     def _tcp_send(self, ip, port, data):
@@ -648,7 +743,7 @@ class LANOfficeApp:
 
             s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             s.settimeout(30)
-            s.connect((ip, FILE_PORT))
+            s.connect((ip, self.file_port))
 
             meta = json.dumps({
                 "filename": filename,
@@ -682,6 +777,7 @@ class LANOfficeApp:
              n /= 1024
          return f"{n:.1f} TB"
 
+    @staticmethod
     @staticmethod
     def _compute_checksum(filepath):
         sha256 = hashlib.sha256()
@@ -724,15 +820,15 @@ class LANOfficeApp:
         payload = json.dumps({"type": "presence", "name": self.username, "ip": self.local_ip}).encode()
         while self.running:
             try:
-                sock.sendto(payload, (self.broadcast_addr, BROADCAST_PORT))
+                sock.sendto(payload, (self.broadcast_addr, self.broadcast_port))
             except Exception: pass
-            time.sleep(BROADCAST_INTERVAL)
+            time.sleep(self.broadcast_interval)
         sock.close()
 
     def _listen_presence(self):
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        sock.bind(("", BROADCAST_PORT))
+        sock.bind(("", self.broadcast_port))
         sock.settimeout(1)
         while self.running:
             try:
@@ -792,7 +888,7 @@ class LANOfficeApp:
     def _listen_chat(self):
         srv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        srv.bind(("", CHAT_PORT))
+        srv.bind(("", self.chat_port))
         srv.listen(10)
         srv.settimeout(1)
         while self.running:
@@ -822,7 +918,7 @@ class LANOfficeApp:
     def _listen_file(self):
         srv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        srv.bind(("", FILE_PORT))
+        srv.bind(("", self.file_port))
         srv.listen(5)
         srv.settimeout(1)
         while self.running:
