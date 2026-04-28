@@ -674,8 +674,12 @@ class OfficeLink(QMainWindow):
         
         self.send_btn = QPushButton()
         self.send_btn.setObjectName("send_btn")
-        self.send_btn.setIcon(QIcon("send_icon.svg"))
-        self.send_btn.setIconSize(QSize(20, 20))
+        send_icon_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "send_icon.svg")
+        if os.path.exists(send_icon_path):
+            self.send_btn.setIcon(QIcon(send_icon_path))
+            self.send_btn.setIconSize(QSize(20, 20))
+        else:
+            self.send_btn.setText("Send")
         self.send_btn.setToolTip("Send")
         self.send_btn.clicked.connect(self.send_chat)
         
