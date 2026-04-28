@@ -37,3 +37,16 @@ Traceback (most recent call last):
     self.tk.call(('image', 'create', imgtype, name,) + options)
     ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 _tkinter.TclError: couldn't recognize data in image file "app_icon.png"
+2026-04-29 00:30:57,675 - LANOffice-10.179.132.201 - INFO - LAN Office started. IP: 10.179.132.201, Broadcast: 10.179.132.255
+2026-04-29 00:30:57,695 - LANOffice-10.179.132.201 - DEBUG - Failed to load app icon
+Traceback (most recent call last):
+  File "C:\Users\HomePC\Downloads\Documents\lan_office-1.py", line 80, in __init__
+    self.icon_img = tk.PhotoImage(file=icon_path)
+                    ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^
+  File "C:\Users\HomePC\AppData\Local\Python\pythoncore-3.14-64\Lib\tkinter\__init__.py", line 4328, in __init__
+    Image.__init__(self, 'photo', name, cnf, master, **kw)
+    ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\HomePC\AppData\Local\Python\pythoncore-3.14-64\Lib\tkinter\__init__.py", line 4275, in __init__
+    self.tk.call(('image', 'create', imgtype, name,) + options)
+    ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_tkinter.TclError: couldn't recognize data in image file "app_icon.png"
