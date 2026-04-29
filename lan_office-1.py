@@ -9,6 +9,7 @@ import struct
 import hashlib
 import logging
 import traceback
+from zeroconf import ServiceInfo, Zeroconf, ServiceBrowser
 
 # ---------------------------------------------
 #  CONFIGURATION
@@ -43,6 +44,118 @@ def get_broadcast_address(local_ip):
     parts[-1] = '255'
     return '.'.join(parts)
 
+class DiscoveryWorker(threading.Thread):
+    """ZeroConf-based service discovery worker"""
+
+    def __init__(self, port, username, peers_lock, peers, logger):
+        super().__init__(daemon=True)
+        self.port = port
+        self.username = username
+        self.peers_lock = peers_lock
+        self.peers = peers
+        self.logger = logger
+        self.zc = None
+        self.info = None
+        self.running = True
+
+    def run(self):
+        try:
+            self.zc = Zeroconf()
+            self.register_me()
+            self.browser = ServiceBrowser(self.zc, "_lanoffice._tcp.local.", self)
+            self.logger.info("ZeroConf discovery started")
+
+            while self.running:
+                time.sleep(1)
+
+        except Exception as e:
+            self.logger.error(f"ZeroConf discovery error: {e}")
+        finally:
+            if self.zc:
+                try:
+                    self.zc.close()
+                except:
+                    pass
+
+    def register_me(self):
+        """Register our service"""
+        try:
+            local_ip = socket.gethostbyname(socket.gethostname())
+            self.info = ServiceInfo(
+                "_lanoffice._tcp.local.",
+                f"{self.username}._lanoffice._tcp.local.",
+                addresses=[socket.inet_aton(local_ip)],
+                port=self.port,
+                properties={
+                    'version': '1.0',
+                    'ip': local_ip
+                }
+            )
+            self.zc.register_service(self.info)
+            self.logger.info(f"Registered service: {self.username} at {local_ip}:{self.port}")
+        except Exception as e:
+            self.logger.error(f"Failed to register service: {e}")
+
+    def update_username(self, new_name):
+        """Update username in service registration"""
+        if self.zc and self.info:
+            try:
+                self.zc.unregister_service(self.info)
+                self.username = new_name
+                self.register_me()
+            except Exception as e:
+                self.logger.error(f"Failed to update service: {e}")
+
+    def add_service(self, zc, type, name):
+        """Called when a service is discovered"""
+        try:
+            info = zc.get_service_info(type, name)
+            if info and info.addresses:
+                ip = socket.inet_ntoa(info.addresses[0])
+                service_name = name.split('.')[0]
+
+                # Skip our own service
+                if ip == socket.gethostbyname(socket.gethostname()):
+                    return
+
+                with self.peers_lock:
+                    if ip not in self.peers:
+                        self.peers[ip] = {"name": service_name, "last_seen": time.time()}
+                        self.logger.info(f"Discovered peer: {service_name} at {ip}:{info.port}")
+        except Exception as e:
+            self.logger.debug(f"Error adding service {name}: {e}")
+
+    def update_service(self, zc, type, name):
+        """Called when a service is updated"""
+        # Re-discover the service to get updated info
+        self.add_service(zc, type, name)
+
+    def remove_service(self, zc, type, name):
+        """Called when a service disappears"""
+        try:
+            service_name = name.split('.')[0]
+            # Find and remove by service name
+            with self.peers_lock:
+                to_remove = None
+                for ip, info in self.peers.items():
+                    if info['name'] == service_name:
+                        to_remove = ip
+                        break
+                if to_remove:
+                    del self.peers[to_remove]
+                    self.logger.info(f"Peer left: {service_name}")
+        except Exception as e:
+            self.logger.debug(f"Error removing service {name}: {e}")
+
+    def stop(self):
+        """Stop the discovery worker"""
+        self.running = False
+        if self.zc and self.info:
+            try:
+                self.zc.unregister_service(self.info)
+            except:
+                pass
+
 class LANOfficeApp:
     def __init__(self, root):
         self.root = root
@@ -72,7 +185,7 @@ class LANOfficeApp:
         self.logger.addHandler(ch)
         self.logger.addHandler(fh)
 
-        self.logger.info(f"LAN Office started. IP: {self.local_ip}, Broadcast: {self.broadcast_addr}")
+        self.logger.info(f"LAN Office started. IP: {self.local_ip} (using ZeroConf discovery)")
 
         # Set Icon
         try:
@@ -89,6 +202,7 @@ class LANOfficeApp:
         self.running = False
         self.networking_started = False
         self.selected_peer_ip = None   # for direct messages
+        self.discovery_worker = None
 
         self.chat_history = []
         self.chat_history_lock = threading.Lock()
@@ -399,8 +513,8 @@ class LANOfficeApp:
 
         # Labels and entries
         fields = {}
-        labels = ["Display name:", "UDP Broadcast Port:", "TCP Chat Port:", "TCP File Port:", "Broadcast Interval (sec):", "Max history load:"]
-        defaults = [self.username, str(self.broadcast_port), str(self.chat_port), str(self.file_port), str(self.broadcast_interval), str(self.max_history_load)]
+        labels = ["Display name:", "TCP Chat Port:", "TCP File Port:", "Max history load:"]
+        defaults = [self.username, str(self.chat_port), str(self.file_port), str(self.max_history_load)]
         y_pos = 20
         for i, label in enumerate(labels):
             tk.Label(settings_win, text=label, bg="#1e1e2e", fg="white", font=("Segoe UI", 10)).place(x=20, y=y_pos)
@@ -418,46 +532,38 @@ class LANOfficeApp:
                     messagebox.showerror("Error", "Display name cannot be empty.")
                     return
 
-                new_broadcast_port = int(fields["UDP Broadcast Port:"].get())
                 new_chat_port = int(fields["TCP Chat Port:"].get())
                 new_file_port = int(fields["TCP File Port:"].get())
-                new_interval = int(fields["Broadcast Interval (sec):"].get())
                 new_max_history = int(fields["Max history load:"].get())
 
-                if not (1024 <= new_broadcast_port <= 65535):
-                    messagebox.showerror("Error", "Broadcast port must be between 1024 and 65535.")
-                    return
                 if not (1024 <= new_chat_port <= 65535):
                     messagebox.showerror("Error", "Chat port must be between 1024 and 65535.")
                     return
                 if not (1024 <= new_file_port <= 65535):
                     messagebox.showerror("Error", "File port must be between 1024 and 65535.")
                     return
-                if new_interval <= 0:
-                    messagebox.showerror("Error", "Broadcast interval must be greater than 0.")
-                    return
                 if new_max_history <= 0:
                     messagebox.showerror("Error", "Max history load must be greater than 0.")
                     return
 
                 # Check if ports changed
-                ports_changed = (new_broadcast_port != self.broadcast_port or
-                                 new_chat_port != self.chat_port or
+                ports_changed = (new_chat_port != self.chat_port or
                                  new_file_port != self.file_port)
 
                 # Update
                 old_name = self.username
                 self.username = new_name
-                self.broadcast_port = new_broadcast_port
                 self.chat_port = new_chat_port
                 self.file_port = new_file_port
-                self.broadcast_interval = new_interval
                 self.max_history_load = new_max_history
                 self._save_config()
 
                 # Log changes
                 if new_name != old_name:
                     self._log_system(f"You changed your name to {self.username}")
+                    # Update ZeroConf service
+                    if self.discovery_worker:
+                        self.discovery_worker.update_username(new_name)
                 if ports_changed:
                     self._log_system("Network settings updated. Restarting networking...")
                     # Restart networking
@@ -819,49 +925,19 @@ class LANOfficeApp:
         self.networking_started = True
 
         self.logger.info("Starting networking threads...")
-        threading.Thread(target=self._broadcast_presence, daemon=True).start()
-        threading.Thread(target=self._listen_presence,    daemon=True).start()
-        threading.Thread(target=self._listen_chat,        daemon=True).start()
-        threading.Thread(target=self._listen_file,        daemon=True).start()
-        threading.Thread(target=self._prune_peers,        daemon=True).start()
 
-    def _broadcast_presence(self):
-        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
-        payload = json.dumps({"type": "presence", "name": self.username, "ip": self.local_ip}).encode()
-        while self.running:
-            try:
-                sock.sendto(payload, (self.broadcast_addr, self.broadcast_port))
-            except Exception: pass
-            time.sleep(self.broadcast_interval)
-        sock.close()
+        # Start ZeroConf discovery
+        self.discovery_worker = DiscoveryWorker(
+            self.chat_port, self.username, self.peers_lock, self.peers, self.logger
+        )
+        self.discovery_worker.start()
 
-    def _listen_presence(self):
-        try:
-            sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-            sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-            sock.bind(("", self.broadcast_port))
-            sock.settimeout(1)
-            self.logger.info(f"Presence listener started on port {self.broadcast_port}")
-        except Exception as e:
-            self.logger.error(f"Failed to start presence listener: {e}")
-            return
+        # Start TCP listeners
+        threading.Thread(target=self._listen_chat, daemon=True).start()
+        threading.Thread(target=self._listen_file, daemon=True).start()
+        threading.Thread(target=self._prune_peers, daemon=True).start()
 
-        while self.running:
-            try:
-                data, addr = sock.recvfrom(1024)
-                msg = json.loads(data.decode())
-                if msg.get("type") == "presence" and addr[0] != self.local_ip:
-                    self._update_peer_presence(addr[0], msg.get("name", addr[0]))
-                elif msg.get("type") == "leave":
-                    self._remove_peer(addr[0], msg.get("name", addr[0]))
-            except socket.timeout: pass
-            except json.JSONDecodeError:
-                pass  # Invalid JSON, ignore
-            except Exception as e:
-                self.logger.debug(f"Presence listener error: {e}")
-                break
-        sock.close()
+
 
     def _update_peer_presence(self, ip, name):
         with self.peers_lock:
@@ -1036,6 +1112,10 @@ class LANOfficeApp:
         self.logger.info("Shutting down LAN Office...")
         self.running = False
         self.networking_started = False
+
+        # Stop discovery worker
+        if self.discovery_worker:
+            self.discovery_worker.stop()
 
         # Give threads time to shut down gracefully
         time.sleep(0.5)
