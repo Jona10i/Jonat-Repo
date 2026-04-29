@@ -63,3 +63,17 @@ Traceback (most recent call last):
     self.tk.call(('image', 'create', imgtype, name,) + options)
     ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 _tkinter.TclError: couldn't recognize data in image file "app_icon.png"
+2026-04-29 17:48:14,967 - LANOffice-192.168.1.114 - INFO - LAN Office started. IP: 192.168.1.114, Broadcast: 192.168.1.255
+2026-04-29 17:48:14,968 - LANOffice-192.168.1.114 - DEBUG - Failed to load app icon
+Traceback (most recent call last):
+  File "C:\Users\HomePC\Downloads\Documents\lan_office-1.py", line 81, in __init__
+    self.icon_img = tk.PhotoImage(file=icon_path)
+                    ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^
+  File "C:\Users\HomePC\AppData\Local\Python\pythoncore-3.14-64\Lib\tkinter\__init__.py", line 4328, in __init__
+    Image.__init__(self, 'photo', name, cnf, master, **kw)
+    ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\HomePC\AppData\Local\Python\pythoncore-3.14-64\Lib\tkinter\__init__.py", line 4265, in __init__
+    master = _get_default_root('create image')
+  File "C:\Users\HomePC\AppData\Local\Python\pythoncore-3.14-64\Lib\tkinter\__init__.py", line 325, in _get_default_root
+    raise RuntimeError(f"Too early to {what}: no default root window")
+RuntimeError: Too early to create image: no default root window

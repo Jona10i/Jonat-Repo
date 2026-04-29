@@ -30,6 +30,7 @@ ERROR_TITLE     = "Export Error"
 def get_local_ip():
     try:
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.settimeout(2)  # Add timeout to prevent hanging
         s.connect(("8.8.8.8", 80))
         ip = s.getsockname()[0]
         s.close()
@@ -86,6 +87,7 @@ class LANOfficeApp:
         self.peers = {}
         self.peers_lock = threading.Lock()
         self.running = False
+        self.networking_started = False
         self.selected_peer_ip = None   # for direct messages
 
         self.chat_history = []
@@ -753,19 +755,21 @@ class LANOfficeApp:
             }).encode()
             s.sendall(struct.pack("!I", len(meta)) + meta)
 
-            self.root.after(0, self._show_progress, True)
+            if self.root and self.root.winfo_exists():
+                self.root.after(0, self._show_progress, True)
             sent = 0
             with open(path, "rb") as f:
                 while True:
-                    if self.cancel_transfer: break
                     chunk = f.read(BUFFER_SIZE)
-                    if not chunk: break
+                    if not chunk:
+                        break
                     s.sendall(chunk)
                     sent += len(chunk)
                     pct = (sent / filesize) * 100
-                    self.root.after(0, self.progress_val.set, pct)
-            s.close()
-            self.root.after(0, self._show_progress, False)
+                    if self.root and self.root.winfo_exists():
+                        self.root.after(0, self.progress_val.set, pct)
+            if self.root and self.root.winfo_exists():
+                self.root.after(0, self._show_progress, False)
             self.root.after(0, self._log_file, f"Sent '{filename}' to {self.peers.get(ip, {}).get('name', ip)}")
         except Exception as e:
             self.root.after(0, self._log_system, f"File send failed: {e}")
@@ -807,7 +811,14 @@ class LANOfficeApp:
     #  NETWORKING â€“ START
     # ==========================================
     def _start_networking(self):
+        if self.networking_started:
+            self.logger.warning("Networking already started, skipping")
+            return
+
         self.running = True
+        self.networking_started = True
+
+        self.logger.info("Starting networking threads...")
         threading.Thread(target=self._broadcast_presence, daemon=True).start()
         threading.Thread(target=self._listen_presence,    daemon=True).start()
         threading.Thread(target=self._listen_chat,        daemon=True).start()
@@ -826,10 +837,16 @@ class LANOfficeApp:
         sock.close()
 
     def _listen_presence(self):
-        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        sock.bind(("", self.broadcast_port))
-        sock.settimeout(1)
+        try:
+            sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            sock.bind(("", self.broadcast_port))
+            sock.settimeout(1)
+            self.logger.info(f"Presence listener started on port {self.broadcast_port}")
+        except Exception as e:
+            self.logger.error(f"Failed to start presence listener: {e}")
+            return
+
         while self.running:
             try:
                 data, addr = sock.recvfrom(1024)
@@ -839,7 +856,11 @@ class LANOfficeApp:
                 elif msg.get("type") == "leave":
                     self._remove_peer(addr[0], msg.get("name", addr[0]))
             except socket.timeout: pass
-            except Exception: pass
+            except json.JSONDecodeError:
+                pass  # Invalid JSON, ignore
+            except Exception as e:
+                self.logger.debug(f"Presence listener error: {e}")
+                break
         sock.close()
 
     def _update_peer_presence(self, ip, name):
@@ -847,14 +868,17 @@ class LANOfficeApp:
             is_new = ip not in self.peers
             self.peers[ip] = {"name": name, "last_seen": time.time()}
         if is_new:
-            self.root.after(0, self._on_peer_join, ip, name)
+            if self.root and self.root.winfo_exists():
+                self.root.after(0, self._on_peer_join, ip, name)
         else:
-            self.root.after(0, self._refresh_peers_list)
+            if self.root and self.root.winfo_exists():
+                self.root.after(0, self._refresh_peers_list)
 
     def _remove_peer(self, ip, name):
         with self.peers_lock:
             if ip in self.peers: del self.peers[ip]
-        self.root.after(0, self._on_peer_leave, ip, name)
+        if self.root and self.root.winfo_exists():
+            self.root.after(0, self._on_peer_leave, ip, name)
 
     def _on_peer_join(self, ip, name):
         self._log_system(f"{name} joined the network.")
@@ -871,7 +895,8 @@ class LANOfficeApp:
                         stale.append((ip, info["name"]))
                         del self.peers[ip]
             for ip, name in stale:
-                self.root.after(0, self._on_peer_leave, ip, name)
+                if self.root and self.root.winfo_exists():
+                    self.root.after(0, self._on_peer_leave, ip, name)
 
     def _on_peer_leave(self, ip, name):
         self._log_system(f"{name} left the network.")
@@ -886,17 +911,25 @@ class LANOfficeApp:
         self.peer_status_label.config(text=f"{count} user{'s' if count != 1 else ''} online")
 
     def _listen_chat(self):
-        srv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        srv.bind(("", self.chat_port))
-        srv.listen(10)
-        srv.settimeout(1)
+        try:
+            srv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            srv.bind(("", self.chat_port))
+            srv.listen(10)
+            srv.settimeout(1)
+            self.logger.info(f"Chat listener started on port {self.chat_port}")
+        except Exception as e:
+            self.logger.error(f"Failed to start chat listener: {e}")
+            return
+
         while self.running:
             try:
                 conn, addr = srv.accept()
                 threading.Thread(target=self._handle_chat, args=(conn, addr), daemon=True).start()
             except socket.timeout: pass
-            except Exception: pass
+            except Exception as e:
+                self.logger.debug(f"Chat listener error: {e}")
+                break
         srv.close()
 
     def _handle_chat(self, conn, addr):
@@ -911,22 +944,31 @@ class LANOfficeApp:
                 data += chunk
             msg = json.loads(data.decode())
             if msg.get("type") == "chat":
-                self.root.after(0, self._log_message, msg["name"], msg["text"], False)
+                if self.root and self.root.winfo_exists():
+                    self.root.after(0, self._log_message, msg["name"], msg["text"], False)
         except Exception: pass
         finally: conn.close()
 
     def _listen_file(self):
-        srv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        srv.bind(("", self.file_port))
-        srv.listen(5)
-        srv.settimeout(1)
+        try:
+            srv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            srv.bind(("", self.file_port))
+            srv.listen(5)
+            srv.settimeout(1)
+            self.logger.info(f"File listener started on port {self.file_port}")
+        except Exception as e:
+            self.logger.error(f"Failed to start file listener: {e}")
+            return
+
         while self.running:
             try:
                 conn, addr = srv.accept()
                 threading.Thread(target=self._handle_file, args=(conn, addr), daemon=True).start()
             except socket.timeout: pass
-            except Exception: pass
+            except Exception as e:
+                self.logger.debug(f"File listener error: {e}")
+                break
         srv.close()
 
     def _handle_file(self, conn, addr):
@@ -952,17 +994,19 @@ class LANOfficeApp:
                 return
 
             received = 0
-            self.root.after(0, self._show_progress, True)
+            if self.root and self.root.winfo_exists():
+                self.root.after(0, self._show_progress, True)
             with open(save_path, "wb") as f:
                 while received < filesize:
-                    if self.cancel_transfer: break
                     chunk = conn.recv(min(BUFFER_SIZE, filesize - received))
                     if not chunk: break
                     f.write(chunk)
                     received += len(chunk)
                     pct = (received / filesize) * 100
-                    self.root.after(0, self.progress_val.set, pct)
-            self.root.after(0, self._show_progress, False)
+                    if self.root and self.root.winfo_exists():
+                        self.root.after(0, self.progress_val.set, pct)
+            if self.root and self.root.winfo_exists():
+                self.root.after(0, self._show_progress, False)
             if checksum and self._compute_checksum(save_path) == checksum:
                 self.root.after(0, self._log_system, f"âœ“ Verified: {filename}")
             self.root.after(0, self._log_file, f"Received '{filename}' from {sender} â†’ saved to {save_path}")
@@ -989,7 +1033,13 @@ class LANOfficeApp:
         return save_path_holder[0]
 
     def on_close(self):
+        self.logger.info("Shutting down LAN Office...")
         self.running = False
+        self.networking_started = False
+
+        # Give threads time to shut down gracefully
+        time.sleep(0.5)
+
         self.root.destroy()
 
 if __name__ == "__main__":
