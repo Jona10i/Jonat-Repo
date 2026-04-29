@@ -1,0 +1,1 @@
+powershell -Command "Get-Content -Path 'c:\Users\HomePC\Downloads\Documents\lan_office-1.py' -TotalCount 921"

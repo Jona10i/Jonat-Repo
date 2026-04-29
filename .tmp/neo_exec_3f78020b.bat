@@ -1,0 +1,1 @@
+cd c:\Users\HomePC\Downloads\Documents && python -c "import tkinter; print('tkinter available')"

@@ -1,0 +1,1 @@
+cd c:\Users\HomePC\Downloads\Documents && python -m py_compile meeting_assistant.py && echo "Syntax OK"

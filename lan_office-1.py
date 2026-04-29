@@ -187,14 +187,9 @@ class LANOfficeApp:
 
         self.logger.info(f"LAN Office started. IP: {self.local_ip} (using ZeroConf discovery)")
 
-        # Set Icon
-        try:
-            icon_path = "app_icon.png"
-            if os.path.exists(icon_path):
-                self.icon_img = tk.PhotoImage(file=icon_path)
-                self.root.iconphoto(True, self.icon_img)
-        except Exception:
-            self.logger.debug("Failed to load app icon", exc_info=True)
+        # Set Icon (deferred to avoid tkinter initialization issues)
+        self.icon_img = None
+        self.root.after(100, self._load_icon)
 
         # {ip: {"name": str, "last_seen": float}}
         self.peers = {}
@@ -1107,6 +1102,17 @@ class LANOfficeApp:
         self.root.after(0, ask_save)
         done_event.wait(timeout=60)
         return save_path_holder[0]
+
+    def _load_icon(self):
+        """Load application icon after tkinter is fully initialized"""
+        try:
+            icon_path = "app_icon.png"
+            if os.path.exists(icon_path):
+                self.icon_img = tk.PhotoImage(file=icon_path)
+                self.root.iconphoto(True, self.icon_img)
+                self.logger.debug("App icon loaded successfully")
+        except Exception:
+            self.logger.debug("Failed to load app icon", exc_info=True)
 
     def on_close(self):
         self.logger.info("Shutting down LAN Office...")

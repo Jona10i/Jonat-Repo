@@ -1,0 +1,1 @@
+ls -la c:\Users\HomePC\Downloads\Documents/*.py 2>/dev/null || dir c:\Users\HomePC\Downloads\Documents\*.py /b
