@@ -1,0 +1,1 @@
+cd c:\Users\HomePC\Downloads\Documents && powershell -Command "Select-String -Path meeting_assistant_ios26.py -Pattern 'def _extract_action_items|def _extract_decisions|def _extract_topics|def _analyze_sentiment|def _generate_summary|def _extract_participants' | Measure-Object | Select-Object -ExpandProperty Count"

@@ -1,0 +1,1 @@
+cd c:\Users\HomePC\Downloads\Documents && dir final_fixes.py 2>&1 | findstr /i "not found"

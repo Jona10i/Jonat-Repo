@@ -1,0 +1,1 @@
+python -c "with open(r'c:\Users\HomePC\Downloads\Documents\meeting_assistant_ios26.py', 'r', encoding='utf-8', errors='ignore') as f: content = f.read(); print('tempfile.mktemp' in content); print('app' in content.split('def main')[1])"

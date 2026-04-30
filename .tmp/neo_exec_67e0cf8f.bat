@@ -1,0 +1,1 @@
+cd c:\Users\HomePC\Downloads\Documents && powershell -Command "(Select-String -Path meeting_assistant_ios26.py -Pattern 'def _extract_').Count"

@@ -1,0 +1,1 @@
+python -c "with open(r'c:\Users\HomePC\Downloads\Documents\meeting_assistant_ios26.py', 'r', encoding='utf-8', errors='ignore') as f: content = f.read(); print('IOS26Styles' in content); print('FONT_DISPLAY' in content); print('FONT_TEXT' in content); print('APP_NAME' in content); print('NamedTemporaryFile' in content); print('_extract_action_items' in content)"

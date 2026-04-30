@@ -1,0 +1,1 @@
+cd c:\Users\HomePC\Downloads\Documents && powershell -Command "if (Test-Path final_fixes.py -or Test-Path refactor_analyze_meeting.py -or Test-Path analyze_issues.py) { Write-Host 'Utility scripts still exist' } else { Write-Host 'Utility scripts cleaned up' }"

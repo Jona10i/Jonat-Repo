@@ -1,0 +1,1 @@
+python -c "with open(r'c:\Users\HomePC\Downloads\Documents\meeting_assistant_ios26.py', 'r', encoding='utf-8', errors='ignore') as f: print(f.read(2000))"

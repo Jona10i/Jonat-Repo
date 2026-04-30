@@ -1,0 +1,1 @@
+python -c "print(open(r'c:\Users\HomePC\Downloads\Documents\meeting_assistant_ios26.py', 'r').read())"
