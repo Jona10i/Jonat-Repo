@@ -1106,12 +1106,21 @@ class LANOfficeApp:
     def _load_icon(self):
         """Load application icon after tkinter is fully initialized"""
         try:
-            icon_path = "app_icon.png"
-            if os.path.exists(icon_path):
-                self.icon_img = tk.PhotoImage(file=icon_path)
-                self.root.iconphoto(True, self.icon_img)
-                self.logger.debug("App icon loaded successfully")
+            # Resolve relative path based on this script's directory so the app
+            # can be launched from anywhere.
+            base_dir = os.path.dirname(os.path.abspath(__file__))
+            icon_path = os.path.join(base_dir, "app_icon.png")
+
+            if not os.path.exists(icon_path):
+                self.logger.debug(f"App icon not found: {icon_path}")
+                return
+
+            # Bind the PhotoImage to the current Tk root to avoid "no default root window".
+            self.icon_img = tk.PhotoImage(master=self.root, file=icon_path)
+            self.root.iconphoto(True, self.icon_img)
+            self.logger.debug("App icon loaded successfully")
         except Exception:
+            # Icon loading must never prevent the app from starting.
             self.logger.debug("Failed to load app icon", exc_info=True)
 
     def on_close(self):
@@ -1133,4 +1142,3 @@ if __name__ == "__main__":
     app = LANOfficeApp(root)
     root.protocol("WM_DELETE_WINDOW", app.on_close)
     root.mainloop()
-
