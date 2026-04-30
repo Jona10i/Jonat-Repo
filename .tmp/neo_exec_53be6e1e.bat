@@ -1,0 +1,1 @@
+cd c:\Users\HomePC\Downloads\Documents && powershell -Command "$content = Get-Content meeting_assistant_ios26.py -Raw; $pattern = 'class iOS26Styles'; $count = ([regex]::Matches($content, $pattern)).Count; Write-Host \"Occurrences of 'class iOS26Styles': $count\""

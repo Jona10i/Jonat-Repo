@@ -1,0 +1,1 @@
+cd c:\Users\HomePC\Downloads\Documents && powershell -Command "$lines = Get-Content meeting_assistant_ios26.py; for($i=920; $i -lt [Math]::Min(930, $lines.Count); $i++) { Write-Host \"$($i+1): $($lines[$i])\" }"

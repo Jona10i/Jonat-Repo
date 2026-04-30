@@ -1,0 +1,1 @@
+cd c:\Users\HomePC\Downloads\Documents && python -c "import ast; f=open('meeting_assistant_ios26.py', 'r', encoding='utf-8'); ast.parse(f.read()); print('AST parsing successful')"

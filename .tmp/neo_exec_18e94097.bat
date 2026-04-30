@@ -1,0 +1,1 @@
+cd c:\Users\HomePC\Downloads\Documents && powershell -Command "$content = Get-Content meeting_assistant_ios26.py -Raw; $matches = [regex]::Matches($content, '^\"\"\"'); Write-Host \"Number of triple-quoted docstring starts: $($matches.Count)\""

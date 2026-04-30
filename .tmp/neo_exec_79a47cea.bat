@@ -1,0 +1,1 @@
+cd c:\Users\HomePC\Downloads\Documents && powershell -Command "(Get-Content meeting_assistant_ios26.py | Select-Object -First 50 | Select-Object -Last 10)"

@@ -1,0 +1,1 @@
+cd c:\Users\HomePC\Downloads\Documents && powershell -Command "$lines = Get-Content meeting_assistant_backup.py; for($i=330; $i -lt 345; $i++) { Write-Host \"$($i+1): $($lines[$i])\" }"
