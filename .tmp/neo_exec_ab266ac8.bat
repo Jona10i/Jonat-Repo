@@ -1,0 +1,1 @@
+cd c:\Users\HomePC\Downloads\Documents && powershell -Command "Select-String -Path 'meeting_assistant.py' -Pattern 'apply_dwm_rounded_corners|MediaStorageManager|_create_peer_widget' | Select-Object -First 10"
