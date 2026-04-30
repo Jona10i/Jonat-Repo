@@ -1,0 +1,1 @@
+cd c:\Users\HomePC\Downloads\Documents && powershell -Command "Get-Content meeting_assistant_ios26.py -Raw" 2>&1 | head -c 80000

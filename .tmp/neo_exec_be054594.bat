@@ -1,0 +1,1 @@
+cd c:\Users\HomePC\Downloads\Documents && powershell -Command "Get-Content meeting_assistant_ios26.py | ForEach-Object { $i++; if ($i -ge 1265 -and $i -le 1275) { [PSCustomObject]@{ Line = $i; Content = $_ } } }"

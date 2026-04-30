@@ -1,0 +1,1 @@
+cd c:\Users\HomePC\Downloads\Documents && powershell -Command "Get-Content meeting_assistant_ios26.py -Head 200 | Set-Content temp_view.py; python temp_view.py" 2>&1 || powershell -Command "Get-Content meeting_assistant_ios26.py -Head 100"

@@ -1,0 +1,1 @@
+cd c:\Users\HomePC\Downloads\Documents && powershell -Command "Get-Content meeting_assistant_ios26.py | ForEach-Object { $i++; [PSCustomObject]@{ Line = $i; Content = $_ } } | Where-Object { $_.Line -ge 1500 -or $_.Content -match 'tempfile.mktemp|def main|app = ' }"

@@ -155,10 +155,6 @@ IOS26_ANIMATION = {
 }
 
 DEFAULT_FONT_FAMILY = "Segoe UI"  # Fallback font
-FONT_DISPLAY = FONT_DISPLAY
-FONT_TEXT = FONT_TEXT
-FONT_DISPLAY = FONT_DISPLAY
-FONT_TEXT = FONT_TEXT
 BROADCAST_PORT = 55000
 CHAT_PORT = 55001
 FILE_PORT = 55002
@@ -190,7 +186,7 @@ def get_local_ip():
         return "127.0.0.1"
 
 
-class IOS26Styles:
+class iOS26Styles:
     """iOS 26 Design System Styles"""
     
     @staticmethod
@@ -338,7 +334,7 @@ class DiscoveryWorker(threading.Thread):
             if self.zc:
                 try:
                     self.zc.close()
-                except Exception:
+                except:
                     pass
 
     def register_me(self):
@@ -374,7 +370,7 @@ class DiscoveryWorker(threading.Thread):
     def update_service(self, zc, type, name):
         self.add_service(zc, type, name)
 
-    def remove_service(self, _zc, _type, name):
+    def remove_service(self, zc, type, name):
         try:
             service_name = name.split('.')[0]
             with self.peers_lock:
@@ -394,7 +390,7 @@ class DiscoveryWorker(threading.Thread):
         if self.zc and self.info:
             try:
                 self.zc.unregister_service(self.info)
-            except Exception:
+            except:
                 pass
 
 
@@ -431,7 +427,7 @@ class MeetingAnalyzer:
                 try:
                     os.system("python -m spacy download en_core_web_sm")
                     self.nlp = spacy.load("en_core_web_sm")
-                except Exception:
+                except:
                     pass
 
     def transcribe_audio(self, audio_path):
@@ -1266,9 +1262,7 @@ class MeetingAssistantApp:
         """Process recorded audio"""
         if audio_data is None:
             return
-        temp_file = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
-        temp_path = temp_file.name
-        temp_file.close()
+        temp_path = tempfile.mktemp(suffix=".wav")
         if self.recorder.save_to_file(audio_data, temp_path):
             self._transcribe_and_analyze(temp_path)
             os.remove(temp_path)
@@ -1609,7 +1603,7 @@ class MeetingAssistantApp:
 
 def main():
     root = tk.Tk()
-    MeetingAssistantApp(root)
+    app = MeetingAssistantApp(root)
     root.mainloop()
 
 

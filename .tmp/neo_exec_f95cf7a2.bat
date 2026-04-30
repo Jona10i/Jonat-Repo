@@ -1,0 +1,1 @@
+cd c:\Users\HomePC\Downloads\Documents && python final_fixes.py

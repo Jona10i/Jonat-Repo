@@ -1,0 +1,1 @@
+cd c:\Users\HomePC\Downloads\Documents && copy meeting_assistant_ios26_backup.py meeting_assistant_ios26.py /Y

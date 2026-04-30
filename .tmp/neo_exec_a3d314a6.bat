@@ -1,0 +1,1 @@
+cd c:\Users\HomePC\Downloads\Documents && python fix_bare_except.py

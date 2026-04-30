@@ -1,0 +1,1 @@
+cd c:\Users\HomePC\Downloads\Documents && powershell -Command "Get-Content meeting_assistant_ios26.py | ForEach-Object { $i++; [PSCustomObject]@{ Line = $i; Content = $_ } } | Select-Object -First 500"

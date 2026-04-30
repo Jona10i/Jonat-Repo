@@ -1,0 +1,1 @@
+cd c:\Users\HomePC\Downloads\Documents && python check_bare_except.py

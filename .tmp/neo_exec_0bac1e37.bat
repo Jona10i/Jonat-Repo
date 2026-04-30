@@ -1,0 +1,1 @@
+cd c:\Users\HomePC\Downloads\Documents && type meeting_assistant_ios26.py | findstr /n "FONT_DISPLAY\|FONT_TEXT\|APP_NAME\|iOS26Styles\|except:"
