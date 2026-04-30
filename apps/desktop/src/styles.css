@@ -1,0 +1,149 @@
+:root {
+  font-family: "Segoe UI", Arial, sans-serif;
+  color: #d7dbe7;
+  background: #1d2330;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+}
+
+.layout {
+  display: grid;
+  grid-template-columns: 160px 1fr 180px;
+  height: 100vh;
+  background: #1d2330;
+}
+
+.sidebar,
+.panel {
+  padding: 0.8rem;
+  background: #181d27;
+  border-right: 1px solid #2b3449;
+}
+
+.panel {
+  border-right: none;
+  border-left: 1px solid #2b3449;
+}
+
+h2,
+h3 {
+  margin: 0.2rem 0 0.6rem;
+}
+
+button,
+input {
+  width: 100%;
+  margin: 0.2rem 0;
+  border-radius: 8px;
+  border: 1px solid #2f3b52;
+  background: #222b3b;
+  color: #d7dbe7;
+  padding: 0.5rem;
+}
+
+button {
+  cursor: pointer;
+}
+
+button.active {
+  border-color: #67adff;
+}
+
+.chat {
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+}
+
+.chatHeader {
+  display: flex;
+  justify-content: space-between;
+  padding: 0.8rem;
+  border-bottom: 1px solid #2b3449;
+}
+
+.messages {
+  padding: 0.8rem;
+  overflow: auto;
+}
+
+.bubble {
+  margin-bottom: 0.6rem;
+  padding: 0.6rem;
+  border-radius: 12px;
+  background: #232f43;
+}
+
+.bubble.broadcast {
+  background: #47322f;
+  border: 1px solid #89554a;
+}
+
+.bubble.reminder {
+  background: #33324d;
+  border: 1px solid #5551a0;
+}
+
+.meta {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.75rem;
+  color: #a8b1c6;
+}
+
+.composer {
+  border-top: 1px solid #2b3449;
+  padding: 0.8rem;
+}
+
+.actions {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.4rem;
+}
+
+.userRow {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.2rem 0;
+}
+
+.dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.dot.on {
+  background: #4ed77a;
+}
+
+.dot.off {
+  background: #a75757;
+}
+
+.small {
+  font-size: 0.75rem;
+  color: #9ca6bd;
+}
+
+.floatingBubble {
+  position: fixed;
+  right: 20px;
+  bottom: 20px;
+  width: 54px;
+  height: 54px;
+  border-radius: 50%;
+  background: #4b88ff;
+  color: white;
+  display: grid;
+  place-items: center;
+  font-weight: 700;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35);
+}
