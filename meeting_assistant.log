@@ -15,3 +15,10 @@
 2026-04-30 01:39:59,979 - MeetingAssistant-10.103.173.201 - INFO - Networking started
 2026-04-30 01:40:01,857 - MeetingAssistant-10.103.173.201 - INFO - Registered service: Jo at 192.168.56.1:55003
 2026-04-30 01:40:01,864 - MeetingAssistant-10.103.173.201 - INFO - ZeroConf discovery started
+2026-04-30 02:43:42,783 - MeetingAssistant-10.103.173.201 - INFO - Loading Whisper model...
+2026-04-30 02:43:58,935 - MeetingAssistant-10.103.173.201 - INFO - Whisper model loaded
+2026-04-30 02:43:58,945 - MeetingAssistant-10.103.173.201 - INFO - Loading NLP models...
+2026-04-30 02:44:01,997 - MeetingAssistant-10.103.173.201 - ERROR - Failed to load NLP models: "Unknown task summarization, available tasks are ['any-to-any', 'audio-classification', 'automatic-speech-recognition', 'depth-estimation', 'document-question-answering', 'feature-extraction', 'fill-mask', 'image-classification', 'image-feature-extraction', 'image-segmentation', 'image-text-to-text', 'keypoint-matching', 'mask-generation', 'ner', 'object-detection', 'sentiment-analysis', 'table-question-answering', 'text-classification', 'text-generation', 'text-to-audio', 'text-to-speech', 'token-classification', 'video-classification', 'zero-shot-audio-classification', 'zero-shot-classification', 'zero-shot-image-classification', 'zero-shot-object-detection']"
+2026-04-30 02:45:01,729 - MeetingAssistant-10.103.173.201 - INFO - Networking started
+2026-04-30 02:45:03,713 - MeetingAssistant-10.103.173.201 - INFO - Registered service: Jo at 192.168.56.1:55003
+2026-04-30 02:45:03,840 - MeetingAssistant-10.103.173.201 - INFO - ZeroConf discovery started
