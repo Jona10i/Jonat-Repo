@@ -1,0 +1,1 @@
+cd c:\Users\HomePC\Downloads\Documents && powershell -Command "Select-String -Path meeting_assistant_ios26.py -Pattern '_extract_action_items|_extract_decisions|_extract_topics|_analyze_sentiment|_generate_summary|_extract_participants' | Select-Object -First 10"

@@ -1,0 +1,1 @@
+cd c:\Users\HomePC\Downloads\Documents && del final_fixes.py refactor_analyze_meeting.py analyze_issues.py apply_fixes.py fix_bare_except.py check_bare_except.py read_analyze_meeting.py
