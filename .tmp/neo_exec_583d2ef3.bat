@@ -1,0 +1,1 @@
+cd c:\Users\HomePC\Downloads\Documents && powershell -Command "Select-String -Path 'meeting_assistant.py' -Pattern 'class.*App|def __init__|self\.root|geometry|title|mainloop' | Select-Object -First 30"

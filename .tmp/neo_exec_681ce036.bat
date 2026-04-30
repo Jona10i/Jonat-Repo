@@ -1,0 +1,1 @@
+powershell -Command "Get-Content -Path 'c:\Users\HomePC\Downloads\Documents\meeting_assistant.py' -TotalCount 300"

@@ -1,0 +1,1 @@
+cd c:\Users\HomePC\Downloads\Documents && findstr /n "class.*App\|def __init__\|self.root\|geometry\|title\|mainloop" meeting_assistant.py | head -50
