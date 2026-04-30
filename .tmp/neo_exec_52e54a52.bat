@@ -1,0 +1,1 @@
+findstr /i "bubble 64px animation draggable" "c:\Users\HomePC\Downloads\Documents\meeting_assistant.py"

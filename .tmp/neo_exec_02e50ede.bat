@@ -1,0 +1,1 @@
+dir "c:\Users\HomePC\Downloads\Documents\meeting_assistant.py" "c:\Users\HomePC\Downloads\Documents\meeting_assistant_ios26.py" "c:\Users\HomePC\Downloads\Documents\MEETING_ASSISTANT_README.md"

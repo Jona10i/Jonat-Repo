@@ -1,0 +1,1 @@
+cd c:\Users\HomePC\Downloads\Documents && python meeting_assistant_ios26.py

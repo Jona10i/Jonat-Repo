@@ -1,0 +1,1 @@
+powershell -Command "Get-Content -Path 'c:\Users\HomePC\Downloads\Documents\meeting_assistant.py' | Select-Object -Skip 500 -First 500"

@@ -1,0 +1,1 @@
+findstr /i "420 720 64px 24px 16px 12px #0A84FF #30D158 #BF5AF2 #FF375F" "c:\Users\HomePC\Downloads\Documents\meeting_assistant.py"
