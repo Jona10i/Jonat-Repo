@@ -1,0 +1,1 @@
+cd c:\Users\HomePC\Downloads\Documents && git add meeting_assistant*.py MEETING_ASSISTANT_README.md requirements.txt 2>nul && git status

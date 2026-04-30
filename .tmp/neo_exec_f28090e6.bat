@@ -1,0 +1,1 @@
+cd c:\Users\HomePC\Downloads\Documents && git commit -m "Add Meeting Assistant documentation and requirements"

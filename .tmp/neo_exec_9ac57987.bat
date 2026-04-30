@@ -1,0 +1,1 @@
+cd c:\Users\HomePC\Downloads\Documents && git ls-files | findstr meeting

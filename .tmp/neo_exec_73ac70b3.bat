@@ -1,0 +1,1 @@
+cd c:\Users\HomePC\Downloads\Documents && git status 2>nul || echo "Not a git repo"

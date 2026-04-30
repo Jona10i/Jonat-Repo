@@ -1,0 +1,1 @@
+cd c:\Users\HomePC\Downloads\Documents && git add MEETING_ASSISTANT_README.md requirements.txt && git status
