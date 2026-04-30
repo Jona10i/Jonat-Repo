@@ -1,0 +1,1 @@
+cd c:\Users\HomePC\Downloads\Documents && powershell -Command "Select-String -Path 'meeting_assistant.py' -Pattern '_build_ios26_peers_section'"

@@ -1,0 +1,1 @@
+cd c:\Users\HomePC\Downloads\Documents && powershell -Command "Get-Content meeting_assistant.py | Select-Object -Skip 35 -First 5"

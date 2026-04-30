@@ -1,0 +1,1 @@
+cd c:\Users\HomePC\Downloads\Documents && powershell -Command "Select-String -Path 'meeting_assistant.py' -Pattern 'from zeroconf' | Select-Object -First 1"

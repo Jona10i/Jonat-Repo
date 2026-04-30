@@ -1,0 +1,1 @@
+cd c:\Users\HomePC\Downloads\Documents && python -c "exec(open('fix_and_enhance.py').read().replace(chr(10004), 'OK'))"

@@ -1,0 +1,1 @@
+cd c:\Users\HomePC\Downloads\Documents && python -c "import fix_and_enhance; print('Script imported OK')" 2>&1 | findstr "File enhanced"
