@@ -9,6 +9,8 @@ let discoveredServerUrl = "http://localhost:4010";
 let browser;
 let bonjour;
 const discoveredServers = new Map();
+let discoverySweepTimer;
+const DISCOVERY_STALE_MS = 30000;
 
 const configDir = path.join(app.getPath("userData"), "config");
 const configPath = path.join(configDir, "settings.json");
@@ -56,6 +58,40 @@ function getDiscoveredServerList() {
     if (b.url === discoveredServerUrl) return 1;
     return a.name.localeCompare(b.name);
   });
+}
+
+function pickFallbackServerUrl() {
+  const first = Array.from(discoveredServers.values())[0];
+  return first?.url ?? "http://localhost:4010";
+}
+
+function ensureSelectedServerAvailable() {
+  if (discoveredServerUrl === "http://localhost:4010") {
+    return;
+  }
+  const hasSelected = Array.from(discoveredServers.values()).some((server) => server.url === discoveredServerUrl);
+  if (hasSelected) {
+    return;
+  }
+  discoveredServerUrl = pickFallbackServerUrl();
+  const next = { ...readSettings(), preferredServerUrl: discoveredServerUrl };
+  writeSettings(next);
+}
+
+function pruneStaleServers() {
+  const now = Date.now();
+  let changed = false;
+  for (const [id, server] of discoveredServers.entries()) {
+    const age = now - new Date(server.lastSeenAt).getTime();
+    if (age > DISCOVERY_STALE_MS) {
+      discoveredServers.delete(id);
+      changed = true;
+    }
+  }
+  if (changed) {
+    ensureSelectedServerAvailable();
+    pushDiscoveryUpdate();
+  }
 }
 
 function pushDiscoveryUpdate() {
@@ -152,8 +188,23 @@ function startZeroconfDiscovery() {
       return;
     }
     discoveredServers.delete(summary.id);
+    ensureSelectedServerAvailable();
     pushDiscoveryUpdate();
   });
+}
+
+function restartZeroconfDiscovery() {
+  if (browser) {
+    browser.stop();
+    browser = null;
+  }
+  if (bonjour) {
+    bonjour.destroy();
+    bonjour = null;
+  }
+  discoveredServers.clear();
+  startZeroconfDiscovery();
+  pushDiscoveryUpdate();
 }
 
 app.whenReady().then(async () => {
@@ -165,6 +216,7 @@ app.whenReady().then(async () => {
     discoveredServerUrl = settings.preferredServerUrl;
   }
   startZeroconfDiscovery();
+  discoverySweepTimer = setInterval(pruneStaleServers, 5000);
   pushDiscoveryUpdate();
 
   if (!settings.storageDirectory) {
@@ -182,6 +234,10 @@ app.whenReady().then(async () => {
 ipcMain.handle("settings:get", () => readSettings());
 ipcMain.handle("server:getUrl", () => discoveredServerUrl);
 ipcMain.handle("server:getList", () => getDiscoveredServerList());
+ipcMain.handle("server:refreshDiscovery", () => {
+  restartZeroconfDiscovery();
+  return getDiscoveredServerList();
+});
 ipcMain.handle("server:setUrl", (_, nextServerUrl) => {
   if (typeof nextServerUrl !== "string" || !nextServerUrl.trim()) {
     return discoveredServerUrl;
@@ -217,6 +273,9 @@ app.on("window-all-closed", () => {
 });
 
 app.on("before-quit", () => {
+  if (discoverySweepTimer) {
+    clearInterval(discoverySweepTimer);
+  }
   if (browser) {
     browser.stop();
   }

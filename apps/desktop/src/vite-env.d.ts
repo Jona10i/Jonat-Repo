@@ -9,6 +9,7 @@ declare global {
       getDiscoveredServers: () => Promise<
         Array<{ id: string; name: string; host: string; port: number; url: string; lastSeenAt: string }>
       >;
+      refreshDiscovery: () => Promise<Array<{ id: string; name: string; host: string; port: number; url: string; lastSeenAt: string }>>;
       setServerUrl: (serverUrl: string) => Promise<string>;
       chooseStorageDirectory: () => Promise<string | null>;
       onStorageSelected: (handler: (path: string) => void) => void;

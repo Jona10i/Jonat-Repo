@@ -5,6 +5,7 @@ contextBridge.exposeInMainWorld("officeApi", {
   setSettings: (updates) => ipcRenderer.invoke("settings:set", updates),
   getServerUrl: () => ipcRenderer.invoke("server:getUrl"),
   getDiscoveredServers: () => ipcRenderer.invoke("server:getList"),
+  refreshDiscovery: () => ipcRenderer.invoke("server:refreshDiscovery"),
   setServerUrl: (serverUrl) => ipcRenderer.invoke("server:setUrl", serverUrl),
   chooseStorageDirectory: () => ipcRenderer.invoke("storage:selectDirectory"),
   onStorageSelected: (handler) => ipcRenderer.on("storage:selected", (_, path) => handler(path)),
