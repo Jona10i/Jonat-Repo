@@ -16,7 +16,13 @@ export type ChatMessage = {
   kind: "message" | "broadcast" | "notification" | "reminder";
 };
 
-type PresenceMap = Map<string, { username: string; online: boolean }>;
+type PresenceEntry = {
+  clientId: string;
+  username: string;
+  online: boolean;
+  departmentId: string;
+  lastSeenAt: string;
+};
 
 const dataDir = path.resolve(process.cwd(), "data");
 const logsPath = path.join(dataDir, "logs.ndjson");
@@ -33,19 +39,82 @@ const departments: Department[] = [
 ];
 
 const messages: ChatMessage[] = [];
-const presence: PresenceMap = new Map();
+const presenceByClient: Map<string, PresenceEntry> = new Map();
+const socketToClient: Map<string, string> = new Map();
 
 export const store = {
   listDepartments: () => departments,
   listMessagesByDepartment: (departmentId: string) =>
     messages.filter((m) => m.departmentId === departmentId).slice(-150),
   putPresence: (socketId: string, username: string, online = true) => {
-    presence.set(socketId, { username, online });
+    const clientId = socketToClient.get(socketId) ?? socketId;
+    socketToClient.set(socketId, clientId);
+    presenceByClient.set(clientId, {
+      clientId,
+      username,
+      online,
+      departmentId: "general",
+      lastSeenAt: new Date().toISOString()
+    });
+  },
+  joinPresence: (socketId: string, clientId: string, username: string, departmentId: string) => {
+    socketToClient.set(socketId, clientId);
+    presenceByClient.set(clientId, {
+      clientId,
+      username,
+      online: true,
+      departmentId,
+      lastSeenAt: new Date().toISOString()
+    });
+  },
+  updatePresenceUsername: (clientId: string, username: string) => {
+    const current = presenceByClient.get(clientId);
+    if (!current) {
+      return;
+    }
+    presenceByClient.set(clientId, {
+      ...current,
+      username,
+      online: true,
+      lastSeenAt: new Date().toISOString()
+    });
+  },
+  updatePresenceDepartment: (clientId: string, departmentId: string) => {
+    const current = presenceByClient.get(clientId);
+    if (!current) {
+      return;
+    }
+    presenceByClient.set(clientId, {
+      ...current,
+      departmentId,
+      online: true,
+      lastSeenAt: new Date().toISOString()
+    });
   },
   removePresence: (socketId: string) => {
-    presence.delete(socketId);
+    const clientId = socketToClient.get(socketId);
+    socketToClient.delete(socketId);
+    if (!clientId) {
+      return;
+    }
+    const current = presenceByClient.get(clientId);
+    if (!current) {
+      return;
+    }
+    presenceByClient.set(clientId, {
+      ...current,
+      online: false,
+      lastSeenAt: new Date().toISOString()
+    });
   },
-  listPresence: () => Array.from(presence.values()),
+  listPresence: () =>
+    Array.from(presenceByClient.values()).sort((a, b) => {
+      if (a.online !== b.online) {
+        return a.online ? -1 : 1;
+      }
+      return a.username.localeCompare(b.username);
+    }),
+  countOnlinePresence: () => Array.from(presenceByClient.values()).filter((entry) => entry.online).length,
   addMessage: (
     payload: Omit<ChatMessage, "id" | "createdAt"> & { id?: string; createdAt?: string }
   ) => {

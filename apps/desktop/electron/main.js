@@ -8,6 +8,7 @@ let tray;
 let discoveredServerUrl = "http://localhost:4010";
 let browser;
 let bonjour;
+const discoveredServers = new Map();
 
 const configDir = path.join(app.getPath("userData"), "config");
 const configPath = path.join(configDir, "settings.json");
@@ -31,6 +32,38 @@ function writeSettings(settings) {
     fs.mkdirSync(configDir, { recursive: true });
   }
   fs.writeFileSync(configPath, JSON.stringify(settings, null, 2));
+}
+
+function toServerSummary(service) {
+  const host = service.referer?.address || service.addresses?.find((a) => a.includes(".")) || service.host;
+  if (!host || !service.port) {
+    return null;
+  }
+  const id = `${service.fqdn || service.name}-${service.port}`;
+  return {
+    id,
+    name: service.name || "Office LAN Comm",
+    host,
+    port: service.port,
+    url: `http://${host}:${service.port}`,
+    lastSeenAt: new Date().toISOString()
+  };
+}
+
+function getDiscoveredServerList() {
+  return Array.from(discoveredServers.values()).sort((a, b) => {
+    if (a.url === discoveredServerUrl) return -1;
+    if (b.url === discoveredServerUrl) return 1;
+    return a.name.localeCompare(b.name);
+  });
+}
+
+function pushDiscoveryUpdate() {
+  if (!mainWindow?.webContents) {
+    return;
+  }
+  mainWindow.webContents.send("server:list", getDiscoveredServerList());
+  mainWindow.webContents.send("server:url", discoveredServerUrl);
 }
 
 function getDockBounds() {
@@ -100,13 +133,26 @@ function createTray() {
 
 function startZeroconfDiscovery() {
   bonjour = new Bonjour();
-  browser = bonjour.find({ type: "office-lan-comm", protocol: "tcp" }, (service) => {
-    const host = service.referer?.address || service.addresses?.find((a) => a.includes(".")) || service.host;
-    if (!host || !service.port) return;
-    discoveredServerUrl = `http://${host}:${service.port}`;
-    if (mainWindow?.webContents) {
-      mainWindow.webContents.send("server:url", discoveredServerUrl);
+  browser = bonjour.find({ type: "office-lan-comm", protocol: "tcp" });
+  browser.on("up", (service) => {
+    const summary = toServerSummary(service);
+    if (!summary) {
+      return;
     }
+    discoveredServers.set(summary.id, summary);
+    const settings = readSettings();
+    if (!settings.preferredServerUrl && discoveredServerUrl === "http://localhost:4010") {
+      discoveredServerUrl = summary.url;
+    }
+    pushDiscoveryUpdate();
+  });
+  browser.on("down", (service) => {
+    const summary = toServerSummary(service);
+    if (!summary) {
+      return;
+    }
+    discoveredServers.delete(summary.id);
+    pushDiscoveryUpdate();
   });
 }
 
@@ -114,9 +160,13 @@ app.whenReady().then(async () => {
   app.setLoginItemSettings({ openAtLogin: true });
   createWindow();
   createTray();
-  startZeroconfDiscovery();
-
   const settings = readSettings();
+  if (typeof settings.preferredServerUrl === "string" && settings.preferredServerUrl) {
+    discoveredServerUrl = settings.preferredServerUrl;
+  }
+  startZeroconfDiscovery();
+  pushDiscoveryUpdate();
+
   if (!settings.storageDirectory) {
     const result = await dialog.showOpenDialog(mainWindow, {
       title: "Select storage directory",
@@ -131,6 +181,17 @@ app.whenReady().then(async () => {
 
 ipcMain.handle("settings:get", () => readSettings());
 ipcMain.handle("server:getUrl", () => discoveredServerUrl);
+ipcMain.handle("server:getList", () => getDiscoveredServerList());
+ipcMain.handle("server:setUrl", (_, nextServerUrl) => {
+  if (typeof nextServerUrl !== "string" || !nextServerUrl.trim()) {
+    return discoveredServerUrl;
+  }
+  discoveredServerUrl = nextServerUrl.trim();
+  const next = { ...readSettings(), preferredServerUrl: discoveredServerUrl };
+  writeSettings(next);
+  pushDiscoveryUpdate();
+  return discoveredServerUrl;
+});
 
 ipcMain.handle("settings:set", (_, updates) => {
   const next = { ...readSettings(), ...updates };

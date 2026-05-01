@@ -10,7 +10,32 @@ type Message = {
   createdAt: string;
   departmentId: string;
 };
-type Presence = { username: string; online: boolean };
+type Presence = {
+  clientId: string;
+  username: string;
+  online: boolean;
+  departmentId: string;
+  lastSeenAt: string;
+};
+type DiscoveredServer = {
+  id: string;
+  name: string;
+  host: string;
+  port: number;
+  url: string;
+  lastSeenAt: string;
+};
+
+function getOrCreateClientId() {
+  const key = "officeLanCommClientId";
+  const existing = window.localStorage.getItem(key);
+  if (existing) {
+    return existing;
+  }
+  const next = `client-${crypto.randomUUID()}`;
+  window.localStorage.setItem(key, next);
+  return next;
+}
 
 export function App() {
   const socketRef = useRef<Socket | null>(null);
@@ -20,10 +45,18 @@ export function App() {
   const [selectedDepartment, setSelectedDepartment] = useState("general");
   const [messages, setMessages] = useState<Message[]>([]);
   const [presence, setPresence] = useState<Presence[]>([]);
+  const [discoveredServers, setDiscoveredServers] = useState<DiscoveredServer[]>([]);
+  const [connectionState, setConnectionState] = useState<"connecting" | "online" | "offline">("connecting");
   const [input, setInput] = useState("");
   const [storageDir, setStorageDir] = useState<string>("");
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
   const [floatingBubble, setFloatingBubble] = useState(true);
+  const selectedDepartmentRef = useRef(selectedDepartment);
+  const clientIdRef = useRef(getOrCreateClientId());
+
+  useEffect(() => {
+    selectedDepartmentRef.current = selectedDepartment;
+  }, [selectedDepartment]);
 
   useEffect(() => {
     void window.officeApi.getServerUrl().then((url) => {
@@ -31,11 +64,13 @@ export function App() {
         setServerUrl(url);
       }
     });
+    void window.officeApi.getDiscoveredServers().then((servers) => setDiscoveredServers(servers));
     window.officeApi.onServerUrl((url) => {
       if (url) {
         setServerUrl(url);
       }
     });
+    window.officeApi.onServerList((servers) => setDiscoveredServers(servers));
 
     void window.officeApi.getSettings().then((settings) => {
       const dir = settings.storageDirectory;
@@ -55,12 +90,25 @@ export function App() {
 
     const socket = io(serverUrl, { autoConnect: true });
     socketRef.current = socket;
-    socket.emit("presence:join", { username });
-    socket.emit("department:join", { departmentId: selectedDepartment });
+    setConnectionState("connecting");
+
+    socket.on("connect", () => {
+      setConnectionState("online");
+      socket.emit("presence:join", {
+        username,
+        clientId: clientIdRef.current,
+        departmentId: selectedDepartmentRef.current
+      });
+      socket.emit("department:join", {
+        departmentId: selectedDepartmentRef.current,
+        clientId: clientIdRef.current
+      });
+    });
+    socket.on("disconnect", () => setConnectionState("offline"));
 
     socket.on("messages:seed", (seed: Message[]) => setMessages(seed));
     socket.on("chat:new", (message: Message) => {
-      if (message.departmentId === selectedDepartment || message.kind === "broadcast") {
+      if (message.departmentId === selectedDepartmentRef.current || message.kind === "broadcast") {
         setMessages((prev) => [...prev, message]);
       }
       if (notificationsEnabled && message.sender !== username && "Notification" in window) {
@@ -82,6 +130,8 @@ export function App() {
     });
 
     return () => {
+      socket.off("connect");
+      socket.off("disconnect");
       socket.off("messages:seed");
       socket.off("chat:new");
       socket.off("presence:list");
@@ -89,7 +139,18 @@ export function App() {
       socket.disconnect();
       socketRef.current = null;
     };
-  }, [notificationsEnabled, selectedDepartment, serverUrl, username]);
+  }, [notificationsEnabled, serverUrl, username]);
+
+  useEffect(() => {
+    const socket = socketRef.current;
+    if (!socket) {
+      return;
+    }
+    socket.emit("department:join", {
+      departmentId: selectedDepartment,
+      clientId: clientIdRef.current
+    });
+  }, [selectedDepartment]);
 
   const onlineCount = useMemo(() => presence.filter((p) => p.online).length, [presence]);
 
@@ -124,7 +185,7 @@ export function App() {
 
   const updateUsername = (next: string) => {
     setUsername(next);
-    socketRef.current?.emit("username:update", { username: next });
+    socketRef.current?.emit("username:update", { username: next, clientId: clientIdRef.current });
   };
 
   return (
@@ -137,14 +198,19 @@ export function App() {
             className={d.id === selectedDepartment ? "active" : ""}
             onClick={() => {
               setSelectedDepartment(d.id);
-              socketRef.current?.emit("department:join", { departmentId: d.id });
+              socketRef.current?.emit("department:join", { departmentId: d.id, clientId: clientIdRef.current });
             }}
           >
             #{d.name}
           </button>
         ))}
         <h3>User</h3>
-        <input value={username} onChange={(e) => updateUsername(e.target.value)} />
+        <input
+          aria-label="Username"
+          placeholder="Enter username"
+          value={username}
+          onChange={(e) => updateUsername(e.target.value)}
+        />
         <h3>Storage</h3>
         <p className="small">{storageDir || "Not selected"}</p>
         <button onClick={() => window.officeApi.chooseStorageDirectory().then((p) => p && setStorageDir(p))}>
@@ -188,14 +254,35 @@ export function App() {
       <aside className="panel">
         <h3>User List</h3>
         {presence.map((p, idx) => (
-          <div key={`${p.username}-${idx}`} className="userRow">
+          <div key={p.clientId || `${p.username}-${idx}`} className="userRow">
             <span className={p.online ? "dot on" : "dot off"} />
-            {p.username}
+            {p.username} <span className="small">({p.departmentId})</span>
           </div>
         ))}
 
         <h3>Settings</h3>
         <p className="small">Server: {serverUrl}</p>
+        <p className="small">Connection: {connectionState}</p>
+        <h3>LAN Servers</h3>
+        {discoveredServers.length ? (
+          discoveredServers.map((server) => (
+            <button
+              key={server.id}
+              className={server.url === serverUrl ? "active" : ""}
+              onClick={() => {
+                void window.officeApi.setServerUrl(server.url);
+                setServerUrl(server.url);
+              }}
+            >
+              {server.name}
+              <span className="small">
+                {server.host}:{server.port}
+              </span>
+            </button>
+          ))
+        ) : (
+          <p className="small">No LAN servers discovered yet.</p>
+        )}
         <label>
           <input
             type="checkbox"

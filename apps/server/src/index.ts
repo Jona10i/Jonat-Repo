@@ -11,7 +11,12 @@ app.use(cors());
 app.use(express.json());
 
 app.get("/health", (_, res) => {
-  res.json({ ok: true, service: "office-lan-comm-server" });
+  res.json({
+    ok: true,
+    service: "office-lan-comm-server",
+    onlineUsers: store.countOnlinePresence(),
+    at: new Date().toISOString()
+  });
 });
 
 app.get("/departments", (_, res) => {
@@ -28,22 +33,42 @@ const io = new Server(server, {
 });
 
 io.on("connection", (socket) => {
-  socket.on("presence:join", ({ username }) => {
-    store.putPresence(socket.id, username, true);
-    store.appendLog("presence.join", { username, socketId: socket.id });
+  socket.on("presence:join", ({ username, clientId, departmentId }) => {
+    const normalizedClientId = typeof clientId === "string" && clientId.trim() ? clientId : socket.id;
+    const normalizedDepartment = typeof departmentId === "string" && departmentId.trim() ? departmentId : "general";
+    const normalizedUsername = typeof username === "string" && username.trim() ? username.trim() : "Unknown";
+    store.joinPresence(socket.id, normalizedClientId, normalizedUsername, normalizedDepartment);
+    store.appendLog("presence.join", {
+      username: normalizedUsername,
+      socketId: socket.id,
+      clientId: normalizedClientId,
+      departmentId: normalizedDepartment
+    });
     io.emit("presence:list", store.listPresence());
   });
 
-  socket.on("username:update", ({ username }) => {
-    store.putPresence(socket.id, username, true);
-    store.appendLog("username.update", { username, socketId: socket.id });
+  socket.on("username:update", ({ username, clientId }) => {
+    if (typeof clientId !== "string" || !clientId.trim()) {
+      return;
+    }
+    const normalizedUsername = typeof username === "string" && username.trim() ? username.trim() : "Unknown";
+    store.updatePresenceUsername(clientId, normalizedUsername);
+    store.appendLog("username.update", {
+      username: normalizedUsername,
+      socketId: socket.id,
+      clientId
+    });
     io.emit("presence:list", store.listPresence());
   });
 
-  socket.on("department:join", ({ departmentId }) => {
+  socket.on("department:join", ({ departmentId, clientId }) => {
     socket.join(departmentId);
-    store.appendLog("department.join", { socketId: socket.id, departmentId });
+    if (typeof clientId === "string" && clientId.trim()) {
+      store.updatePresenceDepartment(clientId, departmentId);
+    }
+    store.appendLog("department.join", { socketId: socket.id, departmentId, clientId });
     socket.emit("messages:seed", store.listMessagesByDepartment(departmentId));
+    io.emit("presence:list", store.listPresence());
   });
 
   socket.on("chat:send", ({ departmentId, sender, text }) => {
