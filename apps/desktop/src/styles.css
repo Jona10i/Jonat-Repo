@@ -158,6 +158,10 @@ button.active {
   background: rgba(109, 43, 43, 0.22);
 }
 
+.discoveryAutoRefreshNote {
+  color: #9fd3ff;
+}
+
 .toastInfo {
   position: fixed;
   right: 16px;

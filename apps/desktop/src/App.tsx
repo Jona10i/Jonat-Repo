@@ -72,6 +72,7 @@ export function App() {
   const [lastDiscoveryRefreshAt, setLastDiscoveryRefreshAt] = useState<number>(Date.now());
   const [refreshingDiscovery, setRefreshingDiscovery] = useState(false);
   const [refreshAgeSeconds, setRefreshAgeSeconds] = useState(0);
+  const [lastCriticalAutoRefreshAt, setLastCriticalAutoRefreshAt] = useState<number | null>(null);
 
   useEffect(() => {
     selectedDepartmentRef.current = selectedDepartment;
@@ -324,7 +325,7 @@ export function App() {
   }, [autoSwitchNotice]);
 
   useEffect(() => {
-    if (!autoRefreshCriticalDiscovery || discoveryStaleState !== "critical" || refreshingDiscovery) {
+    if (!autoRefreshCriticalDiscovery || refreshAgeSeconds <= 40 || refreshingDiscovery) {
       return;
     }
     const now = Date.now();
@@ -339,9 +340,10 @@ export function App() {
       .then((servers) => {
         setDiscoveredServers(servers);
         setLastDiscoveryRefreshAt(Date.now());
+        setLastCriticalAutoRefreshAt(Date.now());
       })
       .finally(() => setRefreshingDiscovery(false));
-  }, [autoRefreshCriticalDiscovery, discoveryStaleState, refreshingDiscovery]);
+  }, [autoRefreshCriticalDiscovery, refreshAgeSeconds, refreshingDiscovery]);
 
   useEffect(() => {
     const socket = socketRef.current;
@@ -360,6 +362,12 @@ export function App() {
     if (refreshAgeSeconds > 20) return "warning";
     return "fresh";
   }, [refreshAgeSeconds]);
+  const criticalAutoRefreshAgeSeconds = useMemo(() => {
+    if (!lastCriticalAutoRefreshAt) {
+      return null;
+    }
+    return Math.max(0, Math.floor((Date.now() - lastCriticalAutoRefreshAt) / 1000));
+  }, [lastCriticalAutoRefreshAt, refreshAgeSeconds]);
 
   const sendMessage = () => {
     if (!input.trim()) return;
@@ -492,6 +500,11 @@ export function App() {
             {discoveryStaleState === "critical"
               ? "Discovery data is stale. LAN list may be outdated."
               : "Discovery data is aging. Consider refreshing."}
+          </p>
+        ) : null}
+        {criticalAutoRefreshAgeSeconds !== null && criticalAutoRefreshAgeSeconds < 120 ? (
+          <p className="small discoveryAutoRefreshNote">
+            Auto-refresh triggered {criticalAutoRefreshAgeSeconds}s ago due to critical staleness.
           </p>
         ) : null}
         {displayedServers.length ? (
