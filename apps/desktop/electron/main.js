@@ -141,7 +141,7 @@ function createWindow() {
 
 function createTray() {
   const icon = nativeImage.createFromDataURL(
-    "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR4nGNgYAAAAAMAASsJTYQAAAAASUVORK5CYII="
+    "data:image/svg+xml;base64,PHN2ZyB4bWxucz0naHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmcnIHdpZHRoPScxNicgaGVpZ2h0PScxNicgdmlld0JveD0nMCAwIDE2IDE2Jz4KICA8cmVjdCB4PScwJyB5PScwJyB3aWR0aD0nMTYnIGhlaWdodD0nMTYnIHJ4PSc0JyBmaWxsPScjMmY1NGViJy8+CiAgPHBhdGggZD0nTTQgOEgxMicgc3Ryb2tlPScjd2hpdGUnIHN0cm9rZS13aWR0aD0nMicgc3Rva2UtbGluZWNhcD0ncm91bmQnLz4KPC9zdmc+"
   );
   tray = new Tray(icon);
   const menu = Menu.buildFromTemplate([
