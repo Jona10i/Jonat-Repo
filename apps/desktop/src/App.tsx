@@ -47,6 +47,86 @@ function getOrCreateClientId() {
   return next;
 }
 
+// Icon components
+const Icons = {
+  minimize: (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path d="M3 8H13" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+    </svg>
+  ),
+  maximize: (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <rect x="2" y="2" width="12" height="12" stroke="currentColor" strokeWidth="2" fill="none" />
+    </svg>
+  ),
+  close: (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path d="M3 3L13 13M13 3L3 13" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+    </svg>
+  ),
+  send: (
+    <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path d="M2 10L18 2L10 18L8 11L2 10Z" fill="currentColor" />
+    </svg>
+  ),
+  attach: (
+    <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path d="M4 7V14C4 15.1 4.9 16 6 16H14C15.1 16 16 15.1 16 14V8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M7 5L13 11" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+    </svg>
+  ),
+  user: (
+    <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <circle cx="10" cy="7" r="3.5" stroke="currentColor" strokeWidth="1.5" />
+      <path d="M3 17.5C3 14.5 6.13 12 10 12C13.87 12 17 14.5 17 17.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+    </svg>
+  ),
+  users: (
+    <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <circle cx="7" cy="7" r="2.5" stroke="currentColor" strokeWidth="1.5" />
+      <circle cx="13" cy="7" r="2.5" stroke="currentColor" strokeWidth="1.5" />
+      <path d="M2 15.5C2 13.5 4.2 12 7 12C9.8 12 12 13.5 12 15.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+      <path d="M8 15.5C8 14 9.34 13 11 13C12.66 13 14 14 14 15.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+    </svg>
+  ),
+  settings: (
+    <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <circle cx="10" cy="10" r="2" stroke="currentColor" strokeWidth="1.5" />
+      <path d="M10 2V4M10 16V18M18 10H16M4 10H2M15.5 4.5L14.1 5.9M5.9 14.1L4.5 15.5M15.5 15.5L14.1 14.1M5.9 5.9L4.5 4.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+    </svg>
+  ),
+  bell: (
+    <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path d="M15 7C15 5.67 14.5 4.5 13.71 3.71C12.89 2.89 11.76 2.5 10.5 2.5C9.24 2.5 8.11 2.89 7.29 3.71C6.5 4.5 6 5.67 6 7C6 13 3 15 3 15H17C17 15 14 13 15 7Z" stroke="currentColor" strokeWidth="1.5" />
+      <path d="M12.73 17.5C12.5 18 11.85 18.5 10.73 18.5C9.6 18.5 8.95 18 8.73 17.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+    </svg>
+  ),
+  check: (
+    <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path d="M17 6L8 15L3 10" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  ),
+  broadcast: (
+    <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <circle cx="10" cy="5" r="2" fill="currentColor" />
+      <path d="M3 15C5 12 7.5 11 10 11C12.5 11 15 12 17 15" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+      <path d="M2 18C4.5 14.5 7 13 10 13C13 13 15.5 14.5 18 18" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+    </svg>
+  ),
+  clock: (
+    <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <circle cx="10" cy="10" r="8" stroke="currentColor" strokeWidth="1.5" />
+      <path d="M10 6V10H13" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  ),
+  refresh: (
+    <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path d="M17 10C17 14 13.5 17 10 17C6.5 17 3 14 3 10C3 6.5 6 3 10 3C11.5 3 12.9 3.5 14 4.2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+      <path d="M16 2V5H13" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  )
+};
+
 export function App() {
   const socketRef = useRef<Socket | null>(null);
   const [username, setUsername] = useState("NewUser");
@@ -78,10 +158,17 @@ export function App() {
   const [refreshingDiscovery, setRefreshingDiscovery] = useState(false);
   const [refreshAgeSeconds, setRefreshAgeSeconds] = useState(0);
   const [lastCriticalAutoRefreshAt, setLastCriticalAutoRefreshAt] = useState<number | null>(null);
+  const [isWindowMinimized, setIsWindowMinimized] = useState(false);
 
   useEffect(() => {
     selectedDepartmentRef.current = selectedDepartment;
   }, [selectedDepartment]);
+
+  useEffect(() => {
+    window.officeApi.onWindowState((state: string) => {
+      setIsWindowMinimized(state === "minimized");
+    });
+  }, []);
 
   useEffect(() => {
     void window.officeApi.getServerUrl().then((url) => {
@@ -466,9 +553,9 @@ export function App() {
           </div>
         </div>
         <div className="windowControls">
-          <button aria-label="Minimize" />
-          <button aria-label="Restore" />
-          <button aria-label="Close" />
+          <button aria-label="Minimize" title="Minimize" className="windowButton minimize">{Icons.minimize}</button>
+          <button aria-label="Restore" title="Restore" className="windowButton maximize">{Icons.maximize}</button>
+          <button aria-label="Close" title="Close" className="windowButton close">{Icons.close}</button>
         </div>
       </header>
 
@@ -537,8 +624,8 @@ export function App() {
               onChange={(e) => handleInputChange(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && sendMessage()}
             />
-            <button type="button" className="attachButton" onClick={triggerFilePicker}>
-              📎
+            <button type="button" className="attachButton" onClick={triggerFilePicker} title="Attach file">
+              {Icons.attach}
             </button>
           </div>
           <input ref={fileInputRef} type="file" style={{ display: "none" }} onChange={handleFileChange} />
@@ -551,22 +638,32 @@ export function App() {
             </div>
           ) : null}
           <div className="actions">
-            <button onClick={sendMessage}>Send</button>
-            <button onClick={sendBroadcast}>Broadcast</button>
-            <button onClick={scheduleReminder}>Reminder</button>
+            <button onClick={sendMessage} className="sendBtn" title="Send message">
+              {Icons.send}
+              Send
+            </button>
+            <button onClick={sendBroadcast} className="broadcastBtn" title="Send to all departments">
+              {Icons.broadcast}
+              Broadcast
+            </button>
+            <button onClick={scheduleReminder} className="reminderBtn" title="Schedule reminder">
+              {Icons.clock}
+              Reminder
+            </button>
           </div>
         </footer>
       </main>
 
       <aside className="panel">
         <div className="userHeader">
-          <h3>User List</h3>
+          <h3>{Icons.users} User List</h3>
           <button
             type="button"
             className={`filterButton ${showOnlyOnlineUsers ? "active" : ""}`}
             onClick={() => setShowOnlyOnlineUsers((prev) => !prev)}
+            title={showOnlyOnlineUsers ? "Show all users" : "Show only online users"}
           >
-            {showOnlyOnlineUsers ? "Showing online" : "View online"}
+            {showOnlyOnlineUsers ? "Online only" : "All users"}
           </button>
         </div>
         {presence
@@ -617,8 +714,11 @@ export function App() {
               .finally(() => setRefreshingDiscovery(false));
           }}
           disabled={refreshingDiscovery}
+          className="refreshBtn"
+          title="Refresh server list"
         >
-          {refreshingDiscovery ? "Refreshing..." : "Refresh Discovery"}
+          {Icons.refresh}
+          {refreshingDiscovery ? "Refreshing..." : "Refresh"}
         </button>
         <p className="small">Last refreshed {refreshAgeSeconds}s ago</p>
         {discoveryStaleState !== "fresh" ? (
@@ -666,7 +766,7 @@ export function App() {
             checked={notificationsEnabled}
             onChange={(e) => setNotificationsEnabled(e.target.checked)}
           />
-          Notifications / Pop-ups
+          {Icons.bell} Notifications
         </label>
         <label>
           <input type="checkbox" checked={floatingBubble} onChange={(e) => setFloatingBubble(e.target.checked)} />
@@ -708,7 +808,29 @@ export function App() {
         </div>
       ) : null}
 
-      {floatingBubble ? <div className="floatingBubble">LAN</div> : null}
+      {floatingBubble ? (
+        <div className={`floatingBubble ${isWindowMinimized ? "expanded" : ""}`}>
+          {isWindowMinimized ? (
+            <div className="userListBubble">
+              <div className="bubbleTitle">Active Users</div>
+              <div className="bubbleUserList">
+                {presence
+                  .filter((p) => p.online)
+                  .map((p, idx) => (
+                    <div key={p.clientId || `${p.username}-${idx}`} className="bubbleUserRow">
+                      <span className="dot on" />
+                      <span className="name">{p.username}</span>
+                      <span className="dept">{p.departmentId}</span>
+                    </div>
+                  ))}
+              </div>
+              <div className="bubbleFooter">Click tray to restore</div>
+            </div>
+          ) : (
+            "LAN"
+          )}
+        </div>
+      ) : null}
     </div>
   </div>
   );

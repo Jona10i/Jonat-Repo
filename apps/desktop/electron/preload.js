@@ -10,5 +10,6 @@ contextBridge.exposeInMainWorld("officeApi", {
   chooseStorageDirectory: () => ipcRenderer.invoke("storage:selectDirectory"),
   onStorageSelected: (handler) => ipcRenderer.on("storage:selected", (_, path) => handler(path)),
   onServerUrl: (handler) => ipcRenderer.on("server:url", (_, serverUrl) => handler(serverUrl)),
-  onServerList: (handler) => ipcRenderer.on("server:list", (_, servers) => handler(servers))
+  onServerList: (handler) => ipcRenderer.on("server:list", (_, servers) => handler(servers)),
+  onWindowState: (handler) => ipcRenderer.on("window:state", (_, state) => handler(state))
 });

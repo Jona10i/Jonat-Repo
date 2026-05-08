@@ -137,6 +137,18 @@ function createWindow() {
       mainWindow.hide();
     }
   });
+
+  mainWindow.on("minimize", () => {
+    mainWindow.webContents.send("window:state", "minimized");
+  });
+
+  mainWindow.on("restore", () => {
+    mainWindow.webContents.send("window:state", "restored");
+  });
+
+  mainWindow.on("show", () => {
+    mainWindow.webContents.send("window:state", "restored");
+  });
 }
 
 function createTray() {

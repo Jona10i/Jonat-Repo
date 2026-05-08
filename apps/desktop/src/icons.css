@@ -1,0 +1,87 @@
+/* Icon Styling */
+svg {
+  width: 20px;
+  height: 20px;
+  display: inline-block;
+}
+
+.windowControls button svg {
+  width: 10px;
+  height: 10px;
+}
+
+.attachButton svg {
+  width: 24px;
+  height: 24px;
+  stroke: currentColor;
+}
+
+.actions button svg {
+  width: 18px;
+  height: 18px;
+  margin-right: 6px;
+  vertical-align: middle;
+}
+
+.actions button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.userHeader h3 svg {
+  width: 18px;
+  height: 18px;
+  display: inline-block;
+  margin-right: 6px;
+  vertical-align: -3px;
+}
+
+.refreshBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  padding: 0.75rem;
+  border-radius: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.08);
+  color: #eef7ff;
+}
+
+.refreshBtn svg {
+  width: 16px;
+  height: 16px;
+}
+
+.refreshBtn:hover {
+  border-color: rgba(255, 255, 255, 0.28);
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.refreshBtn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.sendBtn svg,
+.broadcastBtn svg,
+.reminderBtn svg {
+  width: 16px;
+  height: 16px;
+}
+
+label svg {
+  width: 18px;
+  height: 18px;
+  stroke: currentColor;
+}
+
+.filterButton {
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
