@@ -65,6 +65,8 @@ export function App() {
   const [floatingBubble, setFloatingBubble] = useState(true);
   const [autoSelectBestServer, setAutoSelectBestServer] = useState(true);
   const [autoRefreshCriticalDiscovery, setAutoRefreshCriticalDiscovery] = useState(true);
+  const [isTyping, setIsTyping] = useState(false);
+  const typingTimerRef = useRef<number | null>(null);
   const selectedDepartmentRef = useRef(selectedDepartment);
   const clientIdRef = useRef(getOrCreateClientId());
   const lastAutoSwitchAtRef = useRef(0);
@@ -346,6 +348,14 @@ export function App() {
   }, [autoRefreshCriticalDiscovery, refreshAgeSeconds, refreshingDiscovery]);
 
   useEffect(() => {
+    return () => {
+      if (typingTimerRef.current !== null) {
+        window.clearTimeout(typingTimerRef.current);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
     const socket = socketRef.current;
     if (!socket) {
       return;
@@ -369,6 +379,23 @@ export function App() {
     return Math.max(0, Math.floor((Date.now() - lastCriticalAutoRefreshAt) / 1000));
   }, [lastCriticalAutoRefreshAt, refreshAgeSeconds]);
 
+  const handleInputChange = (value: string) => {
+    setInput(value);
+    setIsTyping(true);
+    if (typingTimerRef.current !== null) {
+      window.clearTimeout(typingTimerRef.current);
+    }
+    typingTimerRef.current = window.setTimeout(() => setIsTyping(false), 1100);
+  };
+
+  const clearTyping = () => {
+    setIsTyping(false);
+    if (typingTimerRef.current !== null) {
+      window.clearTimeout(typingTimerRef.current);
+      typingTimerRef.current = null;
+    }
+  };
+
   const sendMessage = () => {
     if (!input.trim()) return;
     socketRef.current?.emit("chat:send", {
@@ -377,6 +404,7 @@ export function App() {
       text: input.trim()
     });
     setInput("");
+    clearTyping();
   };
 
   const sendBroadcast = () => {
@@ -386,6 +414,7 @@ export function App() {
       text: input.trim()
     });
     setInput("");
+    clearTyping();
   };
 
   const scheduleReminder = () => {
@@ -396,6 +425,7 @@ export function App() {
       departmentId: selectedDepartment
     });
     setInput("");
+    clearTyping();
   };
 
   const updateUsername = (next: string) => {
@@ -404,21 +434,38 @@ export function App() {
   };
 
   return (
-    <div className="layout">
-      <aside className="sidebar">
-        <h2>Departments</h2>
-        {departments.map((d) => (
-          <button
-            key={d.id}
-            className={d.id === selectedDepartment ? "active" : ""}
-            onClick={() => {
-              setSelectedDepartment(d.id);
-              socketRef.current?.emit("department:join", { departmentId: d.id, clientId: clientIdRef.current });
-            }}
-          >
-            #{d.name}
-          </button>
-        ))}
+    <div className="appShell">
+      <div className="topologyLayer" />
+      <header className="titleBar">
+        <div className="titleBrand">
+          <div className="titleBadge" />
+          <div>
+            <div className="appTitle">Liquid Glass LAN</div>
+            <div className="appSubtitle">Real-time LAN messaging across your local network</div>
+          </div>
+        </div>
+        <div className="windowControls">
+          <button aria-label="Minimize" />
+          <button aria-label="Restore" />
+          <button aria-label="Close" />
+        </div>
+      </header>
+
+      <div className="layout">
+        <aside className="sidebar glassPanel">
+          <h2>Departments</h2>
+          {departments.map((d) => (
+            <button
+              key={d.id}
+              className={d.id === selectedDepartment ? "active" : ""}
+              onClick={() => {
+                setSelectedDepartment(d.id);
+                socketRef.current?.emit("department:join", { departmentId: d.id, clientId: clientIdRef.current });
+              }}
+            >
+              #{d.name}
+            </button>
+          ))}
         <h3>User</h3>
         <input
           aria-label="Username"
@@ -440,8 +487,18 @@ export function App() {
         </header>
 
         <section className="messages">
+          {isTyping ? (
+            <div className="typingIndicator">
+              <div className="typingText">Typing...</div>
+              <div className="typingDots">
+                <span />
+                <span />
+                <span />
+              </div>
+            </div>
+          ) : null}
           {messages.map((m) => (
-            <article key={m.id} className={`bubble ${m.kind}`}>
+            <article key={m.id} className={`bubble ${m.kind} ${m.sender === username ? "sent" : "received"}`}>
               <div className="meta">
                 <strong>{m.sender}</strong>
                 <span>{new Date(m.createdAt).toLocaleTimeString()}</span>
@@ -455,7 +512,7 @@ export function App() {
           <input
             placeholder="Message, reminder, or admin broadcast..."
             value={input}
-            onChange={(e) => setInput(e.target.value)}
+            onChange={(e) => handleInputChange(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && sendMessage()}
           />
           <div className="actions">
@@ -474,6 +531,29 @@ export function App() {
             {p.username} <span className="small">({p.departmentId})</span>
           </div>
         ))}
+
+        <div className="networkWidget glassPanel">
+          <div className="networkWidgetHeader">
+            <span className={`pulseDot ${connectionState === "online" ? "online" : "offline"}`} />
+            <div>
+              <div>LAN Active</div>
+              <div className="small">Network pulse and topology status</div>
+            </div>
+          </div>
+          <div className="networkStats">
+            <div>
+              <span>Peers</span>
+              <strong>{onlineCount}</strong>
+            </div>
+            <div>
+              <span>Discovery</span>
+              <strong>{refreshAgeSeconds}s</strong>
+            </div>
+          </div>
+          <div className="waveform">
+            <span /><span /><span /><span /><span />
+          </div>
+        </div>
 
         <h3>Settings</h3>
         <p className="small">Server: {serverUrl}</p>
@@ -584,5 +664,6 @@ export function App() {
 
       {floatingBubble ? <div className="floatingBubble">LAN</div> : null}
     </div>
+  </div>
   );
 }
