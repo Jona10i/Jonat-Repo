@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import { io, type Socket } from "socket.io-client";
 
 type Department = { id: string; name: string };
@@ -66,7 +66,10 @@ export function App() {
   const [autoSelectBestServer, setAutoSelectBestServer] = useState(true);
   const [autoRefreshCriticalDiscovery, setAutoRefreshCriticalDiscovery] = useState(true);
   const [isTyping, setIsTyping] = useState(false);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [showOnlyOnlineUsers, setShowOnlyOnlineUsers] = useState(false);
   const typingTimerRef = useRef<number | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const selectedDepartmentRef = useRef(selectedDepartment);
   const clientIdRef = useRef(getOrCreateClientId());
   const lastAutoSwitchAtRef = useRef(0);
@@ -388,6 +391,22 @@ export function App() {
     typingTimerRef.current = window.setTimeout(() => setIsTyping(false), 1100);
   };
 
+  const triggerFilePicker = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0] ?? null;
+    setSelectedFile(file);
+    if (file) {
+      setIsTyping(false);
+      if (typingTimerRef.current !== null) {
+        window.clearTimeout(typingTimerRef.current);
+        typingTimerRef.current = null;
+      }
+    }
+  };
+
   const clearTyping = () => {
     setIsTyping(false);
     if (typingTimerRef.current !== null) {
@@ -397,13 +416,15 @@ export function App() {
   };
 
   const sendMessage = () => {
-    if (!input.trim()) return;
+    if (!input.trim() && !selectedFile) return;
+    const text = selectedFile ? `📎 File attached: ${selectedFile.name}` : input.trim();
     socketRef.current?.emit("chat:send", {
       departmentId: selectedDepartment,
       sender: username,
-      text: input.trim()
+      text
     });
     setInput("");
+    setSelectedFile(null);
     clearTyping();
   };
 
@@ -509,12 +530,26 @@ export function App() {
         </section>
 
         <footer className="composer">
-          <input
-            placeholder="Message, reminder, or admin broadcast..."
-            value={input}
-            onChange={(e) => handleInputChange(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && sendMessage()}
-          />
+          <div className="composerTop">
+            <input
+              placeholder="Message, reminder, or admin broadcast..."
+              value={input}
+              onChange={(e) => handleInputChange(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && sendMessage()}
+            />
+            <button type="button" className="attachButton" onClick={triggerFilePicker}>
+              📎
+            </button>
+          </div>
+          <input ref={fileInputRef} type="file" style={{ display: "none" }} onChange={handleFileChange} />
+          {selectedFile ? (
+            <div className="filePreview">
+              <span>Attached: {selectedFile.name}</span>
+              <button type="button" className="clearFile" onClick={() => setSelectedFile(null)}>
+                Remove
+              </button>
+            </div>
+          ) : null}
           <div className="actions">
             <button onClick={sendMessage}>Send</button>
             <button onClick={sendBroadcast}>Broadcast</button>
@@ -524,13 +559,24 @@ export function App() {
       </main>
 
       <aside className="panel">
-        <h3>User List</h3>
-        {presence.map((p, idx) => (
-          <div key={p.clientId || `${p.username}-${idx}`} className="userRow">
-            <span className={p.online ? "dot on" : "dot off"} />
-            {p.username} <span className="small">({p.departmentId})</span>
-          </div>
-        ))}
+        <div className="userHeader">
+          <h3>User List</h3>
+          <button
+            type="button"
+            className={`filterButton ${showOnlyOnlineUsers ? "active" : ""}`}
+            onClick={() => setShowOnlyOnlineUsers((prev) => !prev)}
+          >
+            {showOnlyOnlineUsers ? "Showing online" : "View online"}
+          </button>
+        </div>
+        {presence
+          .filter((p) => (showOnlyOnlineUsers ? p.online : true))
+          .map((p, idx) => (
+            <div key={p.clientId || `${p.username}-${idx}`} className="userRow">
+              <span className={p.online ? "dot on" : "dot off"} />
+              {p.username} <span className="small">({p.departmentId})</span>
+            </div>
+          ))}
 
         <div className="networkWidget glassPanel">
           <div className="networkWidgetHeader">
